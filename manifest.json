@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "id": "cafe.vibe.usage",
+  "name": "Vibe Usage",
+  "version": "0.1.0",
+  "author": "tonyliu",
+  "license": "MIT",
+  "description": "vibecafe.ai token spend in the Omarchy bar.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "activation": "on-demand",
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Vibe Usage",
+    "description": "Today's Vibe Usage spend with a seven-day detail panel.",
+    "category": "AI",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "period": "today",
+      "showTokens": true,
+      "refreshIntervalSec": 120,
+      "hideWhenEmpty": false
+    },
+    "schema": [
+      {
+        "key": "period",
+        "type": "string",
+        "label": "Pill period",
+        "description": "The period shown in the bar pill. The panel can switch periods without changing this setting.",
+        "defaultValue": "today",
+        "options": [
+          {
+            "value": "today",
+            "label": "Today"
+          },
+          {
+            "value": "7d",
+            "label": "7 days"
+          }
+        ]
+      },
+      {
+        "key": "showTokens",
+        "type": "boolean",
+        "label": "Show tokens",
+        "description": "Show the token total beside cost in the horizontal bar.",
+        "defaultValue": true
+      },
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "description": "Automatic refresh interval; values are clamped to 30–600 seconds.",
+        "min": 30,
+        "max": 600,
+        "step": 30,
+        "defaultValue": 120
+      },
+      {
+        "key": "hideWhenEmpty",
+        "type": "boolean",
+        "label": "Hide when empty",
+        "description": "Hide the pill when a successful report contains no usage.",
+        "defaultValue": false
+      }
+    ]
+  }
+}
