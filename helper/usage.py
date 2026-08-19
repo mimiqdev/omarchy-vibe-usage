@@ -401,17 +401,17 @@ def main() -> int:
         data = fetch_usage(config)
         emit(build_report(data, config))
         return 0
-    except AuthenticationError:
-        emit({"ok": False, "error": AUTH_ERROR})
-        return 1
-    except UsageError as error:
-        emit({"ok": False, "error": _text(error, "获取用量数据失败")})
-        return 1
-    except Exception:
-        # Do not expose a traceback, config path, or implementation detail to
-        # the long-running QML process. The fixed message is actionable and
-        # keeps stdout a parseable JSON-only channel.
-        emit({"ok": False, "error": "获取用量数据失败"})
+    except Exception as error:
+        if isinstance(error, AuthenticationError):
+            message = AUTH_ERROR
+        elif isinstance(error, UsageError):
+            message = _text(error, "获取用量数据失败")
+        else:
+            # Do not expose a traceback, config path, or implementation detail
+            # to the long-running QML process. The fixed message is actionable
+            # and keeps stdout a parseable JSON-only channel.
+            message = "获取用量数据失败"
+        emit({"ok": False, "error": message})
         return 1
 
 

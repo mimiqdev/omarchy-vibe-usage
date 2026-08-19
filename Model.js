@@ -25,7 +25,9 @@ function autoTextSafe(value) {
 
 function finiteNumber(value, fallback) {
   var number = Number(value)
-  return isFinite(number) ? number : (fallback === undefined ? 0 : fallback)
+  if (Number.isFinite(number)) return number
+  if (fallback === undefined) return 0
+  return fallback
 }
 
 function nonNegative(value) {
@@ -170,7 +172,11 @@ function barText(report, period, showTokens, vertical, loading, error) {
 }
 
 function tooltipText(report, period, loading, error) {
-  if (!report || report.ok !== true) return error ? "Vibe Usage unavailable" : (loading ? "Vibe Usage · loading" : "Vibe Usage")
+  if (!report || report.ok !== true) {
+    if (error) return "Vibe Usage unavailable"
+    if (loading) return "Vibe Usage · loading"
+    return "Vibe Usage"
+  }
   var current = windowFor(report, period)
   if (!current) return "Vibe Usage"
   var totals = current.totals
@@ -183,9 +189,9 @@ function tooltipText(report, period, loading, error) {
 function updatedText(fetchedAt, nowMs) {
   if (!fetchedAt) return "updated time unavailable"
   var fetched = new Date(String(fetchedAt)).getTime()
-  if (!isFinite(fetched)) return "updated time unavailable"
+  if (!Number.isFinite(fetched)) return "updated time unavailable"
   var now = Number(nowMs)
-  if (!isFinite(now)) now = Date.now()
+  if (!Number.isFinite(now)) now = Date.now()
   var elapsed = Math.max(0, now - fetched)
   if (elapsed < 60000) return "updated just now"
   var minutes = Math.floor(elapsed / 60000)
