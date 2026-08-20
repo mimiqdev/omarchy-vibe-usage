@@ -131,7 +131,7 @@ Rules:
 | `today` | `from=` local midnight + `tz=`. Hourly buckets. |
 | `24h` | `days=1` + `tz=`. Rolling 24 hourly buckets. |
 | `7d` / `30d` | `days=N` + `tz=`. Local calendar days (bucketStart is local midnight as UTC). |
-| `tokens` | Sum of `totalTokens` (do not add cache again) |
+| `tokens` | Same as the website / Mac app: `inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens` |
 | `cachedTokens` | Sum of `cachedInputTokens` |
 | `cost` | Sum of `estimatedCost` |
 | `sessions` | Session count in the fetched payload |

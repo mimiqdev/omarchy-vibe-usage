@@ -68,14 +68,14 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(report["range"], "today")
         self.assertEqual(report["totals"], {
             "cost": 5,
-            "tokens": 3300,
+            "tokens": 4150,
             "cachedTokens": 850,
             "sessions": 2,
             "activeSeconds": 1800,
         })
         self.assertEqual(report["series"], [
-            {"key": "2026-08-20T01:00:00+08:00", "label": "01:00", "cost": 4, "tokens": 3000},
-            {"key": "2026-08-20T02:00:00+08:00", "label": "02:00", "cost": 1, "tokens": 300},
+            {"key": "2026-08-20T01:00:00+08:00", "label": "01:00", "cost": 4, "tokens": 3750},
+            {"key": "2026-08-20T02:00:00+08:00", "label": "02:00", "cost": 1, "tokens": 400},
         ])
         self.assertEqual(report["bySource"][0]["name"], "cursor")
         self.assertEqual(report["bySource"][1]["name"], "pi")

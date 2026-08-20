@@ -339,10 +339,32 @@ def _cost(value: Any) -> float:
 
 
 def _tokens(value: Any) -> int | float:
-    # totalTokens is an integer in the API. Preserve fractional test fixtures
+    # Token fields are integers in the API. Preserve fractional test fixtures
     # rather than silently truncating malformed data, while normal responses
     # serialize as compact integers.
     return _tidy(_non_negative(value))
+
+
+def _volume_tokens(bucket: Mapping[str, Any]) -> int | float:
+    """Match the web/Mac dashboard: input + output + reasoning + cache.
+
+    ``totalTokens`` is a billed subtotal and is not added on top. If a payload
+    has no input/output/reasoning fields (tests, older fixtures), fall back to
+    ``totalTokens + cachedInputTokens``.
+    """
+    has_parts = any(
+        key in bucket and bucket.get(key) is not None
+        for key in ("inputTokens", "outputTokens", "reasoningOutputTokens")
+    )
+    cached = _tokens(bucket.get("cachedInputTokens"))
+    if has_parts:
+        return _tokens(
+            _tokens(bucket.get("inputTokens"))
+            + _tokens(bucket.get("outputTokens"))
+            + _tokens(bucket.get("reasoningOutputTokens"))
+            + cached
+        )
+    return _tokens(_tokens(bucket.get("totalTokens")) + cached)
 
 
 def source_label(value: Any) -> str:
@@ -487,7 +509,7 @@ def _series(
         )
         group["cost"] = _tidy(_number(group["cost"]) + _cost(bucket.get("estimatedCost")))
         group["tokens"] = _tokens(
-            _number(group["tokens"]) + _number(_tokens(bucket.get("totalTokens")))
+            _number(group["tokens"]) + _number(_volume_tokens(bucket))
         )
 
     result: list[dict[str, int | float | str]] = []
@@ -525,7 +547,7 @@ def build_window(
 
     for bucket in bucket_values:
         cost = _cost(bucket.get("estimatedCost"))
-        tokens = _tokens(bucket.get("totalTokens"))
+        tokens = _volume_tokens(bucket)
         cached = _tokens(bucket.get("cachedInputTokens"))
         total_cost += cost
         total_tokens = _tokens(_number(total_tokens) + _number(tokens))
