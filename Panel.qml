@@ -91,11 +91,11 @@ Panel {
   function setRange(value) {
     var next = Model.normalizeRange(value)
     if (range === next) return
+    loading = true
     range = next
     loadError = ""
     initRequired = false
     lastSuccessfulMs = 0
-    loading = true
     if (panelFlick) panelFlick.contentY = 0
     startRefresh()
   }
@@ -424,7 +424,9 @@ Panel {
               Row {
                 anchors.fill: parent
                 anchors.bottomMargin: Style.space(18)
-                spacing: 1
+                // Zero spacing keeps every hourly/daily bar, including the
+                // highlighted last bar, inside the chart width.
+                spacing: 0
 
                 Repeater {
                   model: root.series
@@ -432,7 +434,7 @@ Panel {
                   Item {
                     required property var modelData
                     required property int index
-                    width: Math.max(Style.space(4), trend.width / Math.max(1, root.series.length))
+                    width: trend.width / Math.max(1, root.series.length)
                     height: trend.height - Style.space(18)
 
                     Rectangle {
