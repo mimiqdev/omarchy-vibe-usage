@@ -9,7 +9,7 @@ import "Model.js" as Model
 // identity.
 Panel {
   id: root
-  moduleName: "cafe.vibe.usage"
+  moduleName: "mimiqdev.vibe-usage"
   manageIpc: false
 
   property var anchorItem: null

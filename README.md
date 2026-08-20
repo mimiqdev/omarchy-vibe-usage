@@ -18,10 +18,10 @@ The helper reads the API key itself and never passes it through QML, argv, or en
 `omarchy plugin add` accepts a git URL and the validator rejects symlinks. Copy this tree to the local plugin directory:
 
 ```sh
-mkdir -p ~/.config/omarchy/plugins/cafe.vibe.usage
-cp -a ./. ~/.config/omarchy/plugins/cafe.vibe.usage/
-omarchy plugin validate ~/.config/omarchy/plugins/cafe.vibe.usage
-omarchy plugin enable cafe.vibe.usage --section right
+mkdir -p ~/.config/omarchy/plugins/mimiqdev.vibe-usage
+cp -a ./. ~/.config/omarchy/plugins/mimiqdev.vibe-usage/
+omarchy plugin validate ~/.config/omarchy/plugins/mimiqdev.vibe-usage
+omarchy plugin enable mimiqdev.vibe-usage --section right
 ```
 
 If the old quota meter is installed, remove only that plugin before enabling this one:
@@ -30,7 +30,7 @@ If the old quota meter is installed, remove only that plugin before enabling thi
 omarchy plugin remove akitaonrails.ai-usagebar --yes
 ```
 
-The plugin id is `cafe.vibe.usage`; do not edit `/usr/share/omarchy/`.
+The plugin id is `mimiqdev.vibe-usage`; do not edit `/usr/share/omarchy/`.
 
 ## Controls
 

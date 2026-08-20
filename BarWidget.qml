@@ -7,7 +7,7 @@ import qs.Ui
 // handoff and keyboard summoning.
 BarWidget {
   id: root
-  moduleName: "cafe.vibe.usage"
+  moduleName: "mimiqdev.vibe-usage"
 
   readonly property var panelItem: panelLoader.item
   readonly property bool opened: panelItem ? panelItem.opened === true : false

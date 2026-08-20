@@ -62,8 +62,8 @@ test/model.test.mjs
 test/helper.test.py
 ```
 
-Plugin id: `cafe.vibe.usage`  
-Install path for local landing: `~/.config/omarchy/plugins/cafe.vibe.usage/`  
+Plugin id: `mimiqdev.vibe-usage`  
+Install path for local landing: `~/.config/omarchy/plugins/mimiqdev.vibe-usage/`  
 (`omarchy plugin add` only accepts a git URL; validate forbids symlinks. Copy the tree.)
 
 ## Architecture
@@ -197,10 +197,10 @@ Refresh: timer `refreshIntervalSec` (default 120, clamp 30–600). On open, refe
 ```json
 {
   "schemaVersion": 1,
-  "id": "cafe.vibe.usage",
+  "id": "mimiqdev.vibe-usage",
   "name": "Vibe Usage",
   "version": "0.1.0",
-  "author": "tonyliu",
+  "author": "mimiqdev",
   "license": "MIT",
   "description": "vibecafe.ai token spend in the Omarchy bar.",
   "kinds": ["bar-widget"],
@@ -249,9 +249,9 @@ Never edit `/usr/share/omarchy/`.
 
 1. `omarchy plugin validate` on the plugin folder
 2. `omarchy plugin remove akitaonrails.ai-usagebar --yes`
-3. Copy (not symlink) into `~/.config/omarchy/plugins/cafe.vibe.usage/`
-4. `omarchy plugin enable cafe.vibe.usage --section right`
-5. If needed: `omarchy bar move cafe.vibe.usage --after omarchy.tray`
+3. Copy (not symlink) into `~/.config/omarchy/plugins/mimiqdev.vibe-usage/`
+4. `omarchy plugin enable mimiqdev.vibe-usage --section right`
+5. If needed: `omarchy bar move mimiqdev.vibe-usage --after omarchy.tray`
 
 ## Tests
 

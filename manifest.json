@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "cafe.vibe.usage",
+  "id": "mimiqdev.vibe-usage",
   "name": "Vibe Usage",
   "version": "0.1.0",
-  "author": "tonyliu",
+  "author": "mimiqdev",
   "license": "MIT",
   "description": "vibecafe.ai token spend in the Omarchy bar.",
   "kinds": [
