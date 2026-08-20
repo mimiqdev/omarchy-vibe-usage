@@ -23,7 +23,7 @@ Phase 2 adds local-time range selection, cache and active-time cards, trend bars
 
 Follow the official Mac popover **order**, not its pixels. One API request per selected range, always with `tz=`.
 
-```
+```text
 Hero: Vibe Usage          [↻] [↗]
 [Today] [24H] [7D] [30D]
 ┌ cost ┐ ┌ tokens ┐ ┌ cache ┐ ┌ active ┐
@@ -50,15 +50,19 @@ Donut charts, host/tool/model dropdown filters, stacked input/output/cache bars,
 
 ## Layout
 
-```
+```text
 manifest.json
 README.md
+README.zh-CN.md
 DESIGN.md
+LICENSE
 BarWidget.qml
 Panel.qml
 Model.js
+Locale.js
 helper/usage.py
 test/model.test.mjs
+test/locale.test.mjs
 test/helper.test.py
 ```
 
@@ -68,7 +72,7 @@ Install path for local landing: `~/.config/omarchy/plugins/mimiqdev.vibe-usage/`
 
 ## Architecture
 
-```
+```text
 BarWidget.qml  →  Loader Panel.qml
                       →  Process ["python3", helper, "--range", range]
                               →  read ~/.vibe-usage/config.json
@@ -121,8 +125,17 @@ Success:
 Failure:
 
 ```json
-{ "ok": false, "error": "API Key 无效，请运行 vibe-usage init" }
+{
+  "ok": false,
+  "code": "authentication",
+  "error": "API Key 无效，请运行 vibe-usage init"
+}
 ```
+
+`code` is the stable UI-facing category. QML maps it through `Locale.js` and
+never displays the helper's localized `error` text directly; this keeps English
+UI free of Chinese helper copy while preserving an actionable message for
+older callers and logs.
 
 Rules:
 
@@ -131,8 +144,8 @@ Rules:
 | `today` | `from=` local midnight + `tz=`. Hourly buckets. |
 | `24h` | `days=1` + `tz=`. Rolling 24 hourly buckets. |
 | `7d` / `30d` | `days=N` + `tz=`. Local calendar days (bucketStart is local midnight as UTC). |
-| `tokens` | Same as the website / Mac app: `inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens` |
-| `cachedTokens` | Sum of `cachedInputTokens` |
+| `tokens` | Sum of `inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens` (the Mac `computedTotal`; never add `totalTokens` on top when components are present). If any component is omitted, use `totalTokens + cachedInputTokens` as a compatibility fallback. |
+| `cachedTokens` | Sum of `cachedInputTokens` only |
 | `cost` | Sum of `estimatedCost` |
 | `sessions` | Session count in the fetched payload |
 | `pct` | Share of that window's `cost`, rounded to int |
@@ -145,7 +158,7 @@ Rules:
 
 API shape (already verified):
 
-```
+```text
 GET {apiUrl}/api/usage?<range query>&tz=<local IANA id>
 Authorization: Bearer vbu_...
 
@@ -222,6 +235,15 @@ Refresh: timer `refreshIntervalSec` (default 120, clamp 30–600). On open, refe
 
 `period` only sets the **pill** default. The panel can switch Today/24H/7D/30D without writing settings.
 
+## Localization
+
+`Locale.js` contains English and Simplified Chinese strings. The QML entry
+points normalize `Qt.locale().name`: locales beginning with `zh` use
+`zh-CN`, and every other locale uses English. There is no manual language
+switch; changing the desktop language changes the widget language after the
+shell reloads it. API-controlled labels still pass through the existing text
+sanitization boundary.
+
 ## QML
 
 `Model.js` is pure (no QML globals), testable from Node:
@@ -229,6 +251,7 @@ Refresh: timer `refreshIntervalSec` (default 120, clamp 30–600). On open, refe
 - `parseReport(stdout)`
 - `formatCost` / `formatTokens` / `formatActive`
 - `barText(...)`
+- locale-aware `periodLabel`, `periodMetaLabel`, `tooltipText`, and `updatedText`
 - `autoTextSafe` / `cleanText` (same injection rules as ai-usagebar)
 
 `BarWidget.qml` owns `open/close/opened` and injects `bar` / `settings` / `anchorItem`.

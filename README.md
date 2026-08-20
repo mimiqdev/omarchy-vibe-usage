@@ -1,36 +1,49 @@
 # Vibe Usage Omarchy plugin
 
-A third-party Omarchy 4 `bar-widget` for [vibe-usage](https://github.com/vibe-cafe/vibe-usage). It shows spend and tokens in the bar, with a local-time panel for Today, 24H, 7D, or 30D.
+A third-party Omarchy 4 `bar-widget` for [vibe-usage](https://github.com/vibe-cafe/vibe-usage). It shows spend and token usage in the bar and provides a local-time panel for Today, 24H, 7D, or 30D.
 
-The plugin is display-only. The `vibe-usage` daemon continues to sync local records; the plugin makes one read-only API request when it refreshes.
+[中文文档](README.zh-CN.md)
+
+The plugin is display-only: the `vibe-usage` daemon keeps syncing local records, while this plugin makes one read-only API request whenever it refreshes. It is not an official vibe-cafe or Omarchy plugin.
 
 ## Requirements
 
 - Omarchy 4 with the Quickshell plugin UI
 - Python 3
 - `~/.vibe-usage/config.json` created by `vibe-usage init`
-- A running `vibe-usage` daemon (recommended)
+- A running `vibe-usage` daemon is recommended
 
 The helper reads the API key itself and never passes it through QML, argv, or environment variables. Every request includes the machine's local IANA timezone so calendar ranges match the desktop.
 
-## Install locally
+## Install and update
 
-`omarchy plugin add` accepts a git URL and the validator rejects symlinks. Copy this tree to the local plugin directory:
+The plugin id is `mimiqdev.vibe-usage`. Install it from a public git repository with:
 
 ```sh
-mkdir -p ~/.config/omarchy/plugins/mimiqdev.vibe-usage
-cp -a ./. ~/.config/omarchy/plugins/mimiqdev.vibe-usage/
-omarchy plugin validate ~/.config/omarchy/plugins/mimiqdev.vibe-usage
-omarchy plugin enable mimiqdev.vibe-usage --section right
+omarchy plugin add <git-url> --enable
 ```
 
-If the old quota meter is installed, remove only that plugin before enabling this one:
+For example:
+
+```sh
+omarchy plugin add https://github.com/<owner>/<repository>.git --enable
+```
+
+The manifest must be at the repository root. To update a git-installed copy:
+
+```sh
+omarchy plugin update mimiqdev.vibe-usage
+```
+
+For local development, `omarchy plugin validate` can validate this directory. A copied or `rsync`-installed tree is not a git checkout, so `omarchy plugin update mimiqdev.vibe-usage` will not work until the plugin is installed from git.
+
+If the old quota meter is installed, remove only that unrelated plugin before enabling this one:
 
 ```sh
 omarchy plugin remove akitaonrails.ai-usagebar --yes
 ```
 
-The plugin id is `mimiqdev.vibe-usage`; do not edit `/usr/share/omarchy/`.
+Do not edit `/usr/share/omarchy/`.
 
 ## Controls
 
@@ -42,6 +55,8 @@ The plugin id is `mimiqdev.vibe-usage`; do not edit `/usr/share/omarchy/`.
 - `Esc`: close; `Tab`: move to the neighboring bar panel
 
 A failed refresh keeps the last successful report for that range visible and marks the panel stale. With no cached report, loading displays `…` and an error displays `!`. Missing configuration or a rejected key shows instructions to run `vibe-usage init`.
+
+The panel follows the desktop locale automatically. Locales whose name starts with `zh` use Simplified Chinese; all other locales use English. There is no manual language switch.
 
 ## Helper contract
 
@@ -56,13 +71,67 @@ The helper performs one request per invocation:
 - `7d`: `days=7&tz=<IANA id>`
 - `30d`: `days=30&tz=<IANA id>`
 
-The successful JSON contains `totals` (cost, tokens, cached tokens, sessions, active time), chronological `series` bars, and top-eight `byHost`, `bySource`, and `byModel` lists. Token totals sum `totalTokens`; cache is reported separately from `cachedInputTokens`.
+Successful JSON contains `totals` (cost, computed tokens, cache-only tokens, sessions, active time), chronological `series` bars, and top-eight `byHost`, `bySource`, and `byModel` lists. Token totals match the official website/Mac app:
+
+```text
+inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens
+```
+
+When all component fields are present, `totalTokens` is not added to this value. If any component field is omitted, the helper falls back to `totalTokens + cachedInputTokens` so the displayed volume is not lost. `cachedTokens` remains the sum of `cachedInputTokens` only. Source labels rename `pi-coding-agent` to `pi`; API-controlled labels are sanitized before they reach the UI.
+
+Failure responses include a stable `code` such as `authentication`, `network_error`, or `invalid_json`. The UI translates that code for the active desktop locale instead of displaying the helper's raw error text.
+
+## Panel
+
+The panel follows the official Mac popover's order, not its pixels:
+
+```text
+Vibe Usage                         [refresh] [dashboard]
+[Today] [24H] [7D] [30D]
+┌ cost ┐ ┌ tokens ┐ ┌ cache ┐ ┌ active ┐
+TREND   (hourly bars for Today/24H, daily bars for 7D/30D)
+BY TOOL
+BY MODEL
+BY HOST
+updated …
+```
+
+The four cards show cost, computed tokens, cache tokens, and active time. Breakdown rows show cost, percentage, and a bar. The helper is restarted cleanly for every refresh; a failed request never discards the previous successful report.
+
+## Publish and release
+
+1. Keep `manifest.json` at the repository root and use the third-party id `mimiqdev.vibe-usage`.
+2. Run the local tests and `omarchy plugin validate .`.
+3. Commit and push the repository to a public git host. Tags or GitHub releases are optional.
+4. Users install the public URL with `omarchy plugin add <git-url> --enable` and later update with `omarchy plugin update mimiqdev.vibe-usage`.
+5. If desired, submit the public repository link to [omarchyplugins.com](https://omarchyplugins.com/) according to that site's current instructions. This is an optional community listing, not an official Omarchy store.
+
+Do not publish API keys or `~/.vibe-usage/config.json`. A local copy is useful for development but does not provide git-based updates.
+
+## Project layout
+
+```text
+manifest.json
+README.md
+README.zh-CN.md
+DESIGN.md
+LICENSE
+BarWidget.qml
+Panel.qml
+Model.js
+Locale.js
+helper/usage.py
+test/model.test.mjs
+test/locale.test.mjs
+test/helper.test.py
+```
 
 ## Tests
 
 ```sh
 python3 test/helper.test.py
 node test/model.test.mjs
+node test/locale.test.mjs
 omarchy plugin validate .
 git diff --check
 ```

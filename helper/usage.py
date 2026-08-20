@@ -30,13 +30,30 @@ MISSING_KEY_ERROR = "未配置 API Key，请运行 vibe-usage init"
 RANGE_ERROR = "不支持的用量范围，请使用 today、24h、7d 或 30d"
 RANGES = ("today", "24h", "7d", "30d")
 
+ERROR_AUTHENTICATION = "authentication"
+ERROR_MISSING_API_KEY = "missing_api_key"
+ERROR_INVALID_RANGE = "invalid_range"
+ERROR_INVALID_API_URL = "invalid_api_url"
+ERROR_HTTP = "http_error"
+ERROR_NETWORK = "network_error"
+ERROR_INVALID_JSON = "invalid_json"
+ERROR_INVALID_RESPONSE = "invalid_response"
+ERROR_GENERIC = "generic"
+
 
 class UsageError(Exception):
     """An expected, user-facing helper failure."""
 
+    def __init__(self, message: str, code: str = ERROR_GENERIC):
+        super().__init__(message)
+        self.code = code
+
 
 class AuthenticationError(UsageError):
     """The API rejected the configured key."""
+
+    def __init__(self, message: str = AUTH_ERROR):
+        super().__init__(message, ERROR_AUTHENTICATION)
 
 
 def config_path() -> Path:
@@ -70,7 +87,7 @@ def normalize_range(value: Any) -> str:
     """Return a supported range name or raise a user-facing error."""
     range_name = _text(value).lower()
     if range_name not in RANGES:
-        raise UsageError(RANGE_ERROR)
+        raise UsageError(RANGE_ERROR, ERROR_INVALID_RANGE)
     return range_name
 
 
@@ -78,7 +95,7 @@ def _api_url(config: Mapping[str, Any]) -> str:
     value = (_text(config.get("apiUrl")) or DEFAULT_API_URL).rstrip("/")
     parts = urlsplit(value)
     if parts.scheme not in {"http", "https"} or not parts.netloc:
-        raise UsageError("配置中的 API 地址无效")
+        raise UsageError("配置中的 API 地址无效", ERROR_INVALID_API_URL)
     return value
 
 
@@ -258,7 +275,7 @@ def fetch_usage(
     """
     api_key = _text(config.get("apiKey"))
     if not api_key:
-        raise UsageError(MISSING_KEY_ERROR)
+        raise UsageError(MISSING_KEY_ERROR, ERROR_MISSING_API_KEY)
     api_url = _api_url(config)
     if days is not None:
         range_name = "24h" if days == 1 else "7d" if days == 7 else "30d"
@@ -280,21 +297,29 @@ def fetch_usage(
     except HTTPError as error:
         if error.code == 401:
             raise AuthenticationError(AUTH_ERROR) from None
-        raise UsageError(f"获取用量数据失败: HTTP {error.code}") from None
+        raise UsageError(
+            f"获取用量数据失败: HTTP {error.code}", ERROR_HTTP
+        ) from None
     except (URLError, TimeoutError, OSError) as error:
         message = _text(getattr(error, "reason", error), "网络请求失败")
         # urllib error text is not allowed to contain the credential. It does
         # not normally include headers, but this replacement is cheap defense
         # in depth for custom openers and future urllib changes.
         message = message.replace(api_key, "[redacted]")
-        raise UsageError(f"获取用量数据失败: {message}") from None
+        raise UsageError(
+            f"获取用量数据失败: {message}", ERROR_NETWORK
+        ) from None
 
     try:
         decoded = json.loads(body.decode("utf-8") if isinstance(body, bytes) else body)
     except (UnicodeError, json.JSONDecodeError):
-        raise UsageError("获取用量数据失败: API 返回了无效 JSON") from None
+        raise UsageError(
+            "获取用量数据失败: API 返回了无效 JSON", ERROR_INVALID_JSON
+        ) from None
     if not isinstance(decoded, dict):
-        raise UsageError("获取用量数据失败: API 返回格式无效")
+        raise UsageError(
+            "获取用量数据失败: API 返回格式无效", ERROR_INVALID_RESPONSE
+        )
     return decoded
 
 
@@ -339,32 +364,31 @@ def _cost(value: Any) -> float:
 
 
 def _tokens(value: Any) -> int | float:
-    # Token fields are integers in the API. Preserve fractional test fixtures
-    # rather than silently truncating malformed data, while normal responses
-    # serialize as compact integers.
     return _tidy(_non_negative(value))
 
 
-def _volume_tokens(bucket: Mapping[str, Any]) -> int | float:
-    """Match the web/Mac dashboard: input + output + reasoning + cache.
+def computed_total_tokens(bucket: Mapping[str, Any]) -> int | float:
+    """Match the website/Mac ``computedTotal`` token definition.
 
-    ``totalTokens`` is a billed subtotal and is not added on top. If a payload
-    has no input/output/reasoning fields (tests, older fixtures), fall back to
-    ``totalTokens + cachedInputTokens``.
+    ``totalTokens`` is a billed-total field and does not include every token
+    category shown by the official usage clients. The displayed token total is
+    input + output + reasoning output + cached input; cached input is also
+    retained separately for the cache card.
     """
-    has_parts = any(
-        key in bucket and bucket.get(key) is not None
-        for key in ("inputTokens", "outputTokens", "reasoningOutputTokens")
+    fields = (
+        "inputTokens",
+        "outputTokens",
+        "reasoningOutputTokens",
+        "cachedInputTokens",
     )
-    cached = _tokens(bucket.get("cachedInputTokens"))
-    if has_parts:
-        return _tokens(
-            _tokens(bucket.get("inputTokens"))
-            + _tokens(bucket.get("outputTokens"))
-            + _tokens(bucket.get("reasoningOutputTokens"))
-            + cached
-        )
-    return _tokens(_tokens(bucket.get("totalTokens")) + cached)
+    if all(bucket.get(field) is not None for field in fields):
+        return _tokens(sum(_number(bucket.get(field)) for field in fields))
+    # Older or partial payloads may omit the component fields. Preserve a
+    # useful displayed volume without double-counting when components exist.
+    return _tokens(
+        _number(bucket.get("totalTokens"))
+        + _number(bucket.get("cachedInputTokens"))
+    )
 
 
 def source_label(value: Any) -> str:
@@ -451,7 +475,9 @@ def _ranked(
 
 def _payload_lists(data: Mapping[str, Any] | None) -> tuple[list[Any], list[Any]]:
     if not isinstance(data, dict):
-        raise UsageError("获取用量数据失败: API 返回格式无效")
+        raise UsageError(
+            "获取用量数据失败: API 返回格式无效", ERROR_INVALID_RESPONSE
+        )
     buckets = data.get("buckets")
     sessions = data.get("sessions")
     return (
@@ -509,7 +535,7 @@ def _series(
         )
         group["cost"] = _tidy(_number(group["cost"]) + _cost(bucket.get("estimatedCost")))
         group["tokens"] = _tokens(
-            _number(group["tokens"]) + _number(_volume_tokens(bucket))
+            _number(group["tokens"]) + _number(computed_total_tokens(bucket))
         )
 
     result: list[dict[str, int | float | str]] = []
@@ -547,7 +573,7 @@ def build_window(
 
     for bucket in bucket_values:
         cost = _cost(bucket.get("estimatedCost"))
-        tokens = _volume_tokens(bucket)
+        tokens = computed_total_tokens(bucket)
         cached = _tokens(bucket.get("cachedInputTokens"))
         total_cost += cost
         total_tokens = _tokens(_number(total_tokens) + _number(tokens))
@@ -622,19 +648,27 @@ def main() -> int:
     requested_range = "today"
     if len(sys.argv) > 1:
         if len(sys.argv) != 3 or sys.argv[1] != "--range":
-            emit({"ok": False, "error": RANGE_ERROR})
+            emit({"ok": False, "code": ERROR_INVALID_RANGE, "error": RANGE_ERROR})
             return 1
         requested_range = sys.argv[2]
 
     try:
         selected = normalize_range(requested_range)
     except UsageError as error:
-        emit({"ok": False, "error": _text(error, RANGE_ERROR)})
+        emit({
+            "ok": False,
+            "code": ERROR_INVALID_RANGE,
+            "error": _text(error, RANGE_ERROR),
+        })
         return 1
 
     config = load_config()
     if not config or not _text(config.get("apiKey")):
-        emit({"ok": False, "error": MISSING_KEY_ERROR})
+        emit({
+            "ok": False,
+            "code": ERROR_MISSING_API_KEY,
+            "error": MISSING_KEY_ERROR,
+        })
         return 1
 
     try:
@@ -643,15 +677,18 @@ def main() -> int:
         return 0
     except Exception as error:
         if isinstance(error, AuthenticationError):
+            code = ERROR_AUTHENTICATION
             message = AUTH_ERROR
         elif isinstance(error, UsageError):
+            code = error.code
             message = _text(error, "获取用量数据失败")
         else:
             # Do not expose a traceback, config path, or implementation detail
             # to the long-running QML process. The fixed message is actionable
             # and keeps stdout a parseable JSON-only channel.
+            code = ERROR_GENERIC
             message = "获取用量数据失败"
-        emit({"ok": False, "error": message})
+        emit({"ok": False, "code": code, "error": message})
         return 1
 
 
