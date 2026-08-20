@@ -4,11 +4,13 @@ import importlib.util
 import json
 import sys
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime
 from pathlib import Path
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 from typing import Any, cast
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("vibe_usage_helper", ROOT / "helper" / "usage.py")
@@ -114,6 +116,27 @@ class HelperTests(unittest.TestCase):
         self.assertEqual([point["label"] for point in report["series"]], ["2026-08-18", "2026-08-19"])
         self.assertEqual(report["totals"]["tokens"], 300)
 
+    def test_component_token_fallback_uses_billed_plus_cache(self):
+        bucket = {
+            "source": "codex",
+            "model": "gpt",
+            "hostname": "Work",
+            "bucketStart": "2026-08-20T03:00:00+08:00",
+            "totalTokens": 700,
+            "cachedInputTokens": 100,
+            "estimatedCost": 1,
+        }
+        report = usage.build_report(
+            {"buckets": [bucket], "sessions": []},
+            {"apiUrl": "https://example.test"},
+            range_name="today",
+            now=self.now,
+            timezone_name=self.timezone_name,
+        )
+        self.assertEqual(report["totals"]["tokens"], 800)
+        self.assertEqual(report["series"][0]["tokens"], 800)
+        self.assertEqual(report["byModel"][0]["tokens"], 800)
+
     def test_top_eight_and_other(self):
         buckets = [
             {"source": f"tool-{i}", "model": f"model-{i}", "hostname": f"host-{i}",
@@ -177,10 +200,14 @@ class HelperTests(unittest.TestCase):
 
         def opener(_request, timeout):
             self.assertEqual(timeout, 15)
-            raise HTTPError(
+            error = HTTPError(
                 "https://vibecafe.ai/api/usage?days=7", 401, "unauthorized",
-                cast(Any, {}), io.BytesIO(),
+                cast(Any, {}), None,
             )
+            try:
+                raise error
+            finally:
+                error.close()
 
         with self.assertRaises(usage.AuthenticationError) as raised:
             usage.fetch_usage(
@@ -188,12 +215,63 @@ class HelperTests(unittest.TestCase):
                 opener=opener, range_name="7d", timezone_name=self.timezone_name,
             )
         self.assertEqual(str(raised.exception), usage.AUTH_ERROR)
+        self.assertEqual(raised.exception.code, usage.ERROR_AUTHENTICATION)
         self.assertNotIn(key, str(raised.exception))
 
     def test_missing_key_is_fixed_error(self):
         with self.assertRaises(usage.UsageError) as raised:
             usage.fetch_usage({"apiUrl": "https://vibecafe.ai"})
         self.assertEqual(str(raised.exception), usage.MISSING_KEY_ERROR)
+        self.assertEqual(raised.exception.code, usage.ERROR_MISSING_API_KEY)
+
+    def test_fetch_failures_have_stable_error_codes(self):
+        config = {"apiUrl": "https://example.test", "apiKey": "vbu_test"}
+
+        def http_failure(_request, timeout):
+            error = HTTPError(
+                "https://example.test/api/usage", 503, "unavailable",
+                cast(Any, {}), None,
+            )
+            try:
+                raise error
+            finally:
+                error.close()
+
+        with self.assertRaises(usage.UsageError) as raised:
+            usage.fetch_usage(config, opener=http_failure)
+        self.assertEqual(raised.exception.code, usage.ERROR_HTTP)
+
+        def network_failure(_request, timeout):
+            raise URLError("offline")
+
+        with self.assertRaises(usage.UsageError) as raised:
+            usage.fetch_usage(config, opener=network_failure)
+        self.assertEqual(raised.exception.code, usage.ERROR_NETWORK)
+
+        invalid_json = FakeResponse({})
+        invalid_json.payload = b"not json"
+        with self.assertRaises(usage.UsageError) as raised:
+            usage.fetch_usage(
+                config,
+                opener=lambda _request, timeout: invalid_json,
+            )
+        self.assertEqual(raised.exception.code, usage.ERROR_INVALID_JSON)
+
+    def test_main_emits_stable_error_codes(self):
+        output = io.StringIO()
+        with patch.object(usage.sys, "argv", ["usage.py", "--range", "bad"]):
+            with redirect_stdout(output):
+                status = usage.main()
+        self.assertEqual(status, 1)
+        self.assertEqual(json.loads(output.getvalue())["code"], usage.ERROR_INVALID_RANGE)
+
+        output = io.StringIO()
+        with patch.object(usage, "load_config", return_value=None):
+            with patch.object(usage.sys, "argv", ["usage.py", "--range", "today"]):
+                with redirect_stdout(output):
+                    status = usage.main()
+        self.assertEqual(status, 1)
+        self.assertEqual(json.loads(output.getvalue())["code"], usage.ERROR_MISSING_API_KEY)
 
 
 if __name__ == "__main__":

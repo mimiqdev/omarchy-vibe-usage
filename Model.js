@@ -115,22 +115,38 @@ function normalizeSeries(raw) {
   return result;
 }
 
+function parseFailure(message, errorCode) {
+  var result = {
+    ok: false,
+    error: autoTextSafe(message),
+  };
+  var code = cleanText(errorCode, 80).trim();
+  if (code !== "") result.errorCode = code;
+  return result;
+}
+
 function parseReport(stdout) {
   try {
     var parsed = JSON.parse(String(stdout || ""));
     if (!parsed || typeof parsed !== "object")
-      return { ok: false, error: "The helper returned an unsupported report." };
+      return parseFailure(
+        "The helper returned an unsupported report.",
+        "invalid_response",
+      );
     if (parsed.ok !== true)
-      return {
-        ok: false,
-        error: autoTextSafe(parsed.error || "Unable to load Vibe Usage."),
-      };
+      return parseFailure(
+        parsed.error || "Unable to load Vibe Usage.",
+        parsed.code || parsed.errorCode,
+      );
     if (
       !isRange(parsed.range) ||
       !parsed.totals ||
       typeof parsed.totals !== "object"
     )
-      return { ok: false, error: "The helper returned an unsupported report." };
+      return parseFailure(
+        "The helper returned an unsupported report.",
+        "invalid_response",
+      );
 
     return {
       ok: true,
@@ -146,7 +162,7 @@ function parseReport(stdout) {
       byModel: normalizeRows(parsed.byModel, false),
     };
   } catch (error) {
-    return { ok: false, error: "The helper returned invalid JSON." };
+    return parseFailure("The helper returned invalid JSON.", "invalid_json");
   }
 }
 
@@ -181,79 +197,40 @@ function formatActive(value) {
   return Math.round(seconds) + "s";
 }
 
-// Keep the pure formatter usable from Node. Panel.qml uses Locale.js for its
-// static strings; these mirrored lookups let Model.js format complete
-// sentences without depending on QML globals or a module loader.
-var MODEL_STRINGS = {
-  en: {
-    brand: "Vibe Usage",
-    "tooltip.unavailable": "Vibe Usage unavailable",
-    "tooltip.loading": "Vibe Usage · loading",
-    "period.today": "Today",
-    "period.24h": "24H",
-    "period.7d": "7D",
-    "period.30d": "30D",
-    "period.meta.today": "Today",
-    "period.meta.24h": "24 hours",
-    "period.meta.7d": "7 days",
-    "period.meta.30d": "30 days",
-    "status.stale": "stale",
-    "status.updatedUnavailable": "updated time unavailable",
-    "status.updatedJustNow": "updated just now",
-    "status.updatedMinutes": "updated {minutes}m ago",
-    "status.updatedHours": "updated {hours}h ago",
-    "status.updatedDays": "updated {days}d ago",
-    "tooltip.tokens": "tokens",
-  },
-  "zh-CN": {
-    brand: "Vibe Usage",
-    "tooltip.unavailable": "Vibe Usage 不可用",
-    "tooltip.loading": "Vibe Usage · 加载中",
-    "period.today": "今天",
-    "period.24h": "24小时",
-    "period.7d": "7天",
-    "period.30d": "30天",
-    "period.meta.today": "今天",
-    "period.meta.24h": "24小时",
-    "period.meta.7d": "7天",
-    "period.meta.30d": "30天",
-    "status.stale": "数据已过期",
-    "status.updatedUnavailable": "更新时间不可用",
-    "status.updatedJustNow": "刚刚更新",
-    "status.updatedMinutes": "{minutes} 分钟前更新",
-    "status.updatedHours": "{hours} 小时前更新",
-    "status.updatedDays": "{days} 天前更新",
-    "tooltip.tokens": "令牌",
-  },
-};
-
-function normalizeUiLocale(value) {
-  var name = String(value === undefined || value === null ? "" : value)
-    .trim()
-    .replace(/_/g, "-")
-    .toLowerCase();
-  return name.indexOf("zh") === 0 ? "zh-CN" : "en";
+// Locale.js is the single source of truth. Node loads it directly; QML passes
+// its imported Locale namespace so the same table is used in both runtimes.
+var LocaleModule = null;
+if (
+  typeof module !== "undefined" &&
+  module.exports &&
+  typeof require === "function"
+) {
+  LocaleModule = require("./Locale.js");
 }
 
-function localizedText(key, params, locale) {
-  var selected = normalizeUiLocale(locale);
-  var text = MODEL_STRINGS[selected][key] || MODEL_STRINGS.en[key] || String(key);
-  if (!params || typeof params !== "object") return text;
-  return text.replace(/\{([A-Za-z0-9_]+)\}/g, function(match, name) {
-    var value = params[name];
-    return value === undefined || value === null ? match : String(value);
-  });
+function localizedText(key, params, locale, localeModule) {
+  var source =
+    localeModule && typeof localeModule.t === "function"
+      ? localeModule
+      : LocaleModule;
+  return source ? source.t(key, params, locale) : String(key);
 }
 
-function periodLabel(period, locale) {
-  return localizedText("period." + normalizeRange(period), null, locale);
+function periodLabel(period, locale, localeModule) {
+  return localizedText(
+    "period." + normalizeRange(period),
+    null,
+    locale,
+    localeModule,
+  );
 }
 
-function periodMetaLabel(period, locale) {
+function periodMetaLabel(period, locale, localeModule) {
   return localizedText(
     "period.meta." + normalizeRange(period),
     null,
     locale,
+    localeModule,
   );
 }
 
@@ -281,47 +258,74 @@ function barText(report, period, showTokens, vertical, loading, error) {
   return text;
 }
 
-function tooltipText(report, period, loading, error, locale) {
+function tooltipText(report, period, loading, error, locale, localeModule) {
   var current = windowFor(report, period);
   if (!current) {
-    if (error) return localizedText("tooltip.unavailable", null, locale);
-    if (loading) return localizedText("tooltip.loading", null, locale);
-    return localizedText("brand", null, locale);
+    if (error) return localizedText("tooltip.unavailable", null, locale, localeModule);
+    if (loading) return localizedText("tooltip.loading", null, locale, localeModule);
+    return localizedText("brand", null, locale, localeModule);
   }
   var totals = current.totals;
   var text =
-    periodMetaLabel(period, locale) +
+    periodMetaLabel(period, locale, localeModule) +
     " · " +
     formatCost(totals.cost, false) +
     " · " +
     formatTokens(totals.tokens) +
     " " +
-    localizedText("tooltip.tokens", null, locale);
-  if (error) text += " · " + localizedText("status.stale", null, locale);
+    localizedText("tooltip.tokens", null, locale, localeModule);
+  if (error)
+    text += " · " + localizedText("status.stale", null, locale, localeModule);
   return text;
 }
 
-function updatedText(fetchedAt, nowMs, locale) {
+function updatedText(fetchedAt, nowMs, locale, localeModule) {
   if (!fetchedAt)
-    return localizedText("status.updatedUnavailable", null, locale);
+    return localizedText(
+      "status.updatedUnavailable",
+      null,
+      locale,
+      localeModule,
+    );
   var fetched = new Date(String(fetchedAt)).getTime();
   if (!Number.isFinite(fetched))
-    return localizedText("status.updatedUnavailable", null, locale);
+    return localizedText(
+      "status.updatedUnavailable",
+      null,
+      locale,
+      localeModule,
+    );
   var now = Number(nowMs);
   if (!Number.isFinite(now)) now = Date.now();
   var elapsed = Math.max(0, now - fetched);
   if (elapsed < 60000)
-    return localizedText("status.updatedJustNow", null, locale);
+    return localizedText(
+      "status.updatedJustNow",
+      null,
+      locale,
+      localeModule,
+    );
   var minutes = Math.floor(elapsed / 60000);
   if (minutes < 60)
-    return localizedText("status.updatedMinutes", { minutes: minutes }, locale);
+    return localizedText(
+      "status.updatedMinutes",
+      { minutes: minutes },
+      locale,
+      localeModule,
+    );
   var hours = Math.floor(minutes / 60);
   if (hours < 24)
-    return localizedText("status.updatedHours", { hours: hours }, locale);
+    return localizedText(
+      "status.updatedHours",
+      { hours: hours },
+      locale,
+      localeModule,
+    );
   return localizedText(
     "status.updatedDays",
     { days: Math.floor(hours / 24) },
     locale,
+    localeModule,
   );
 }
 
@@ -337,14 +341,16 @@ function safeDashboard(value) {
   var url = String(value || "").trim();
   // bar.run executes a shell command. Restrict the URL to characters that are
   // safe in an unquoted argument rather than allowing API data into a shell.
-  if (!/^https?:\/\/[A-Za-z0-9._~:\/%+#=-]+$/i.test(url))
+  if (!/^https?:\/\/[A-Za-z0-9._~:/%+#=-]+$/i.test(url))
     return "https://vibecafe.ai/usage";
   return url;
 }
 
 function requiresInit(error) {
   var text = String(error || "");
-  return /vibe-usage\s+init|未配置\s*API\s*Key|API\s*Key\s*无效/i.test(text);
+  return /vibe-usage\s+init|未配置\s*API\s*Key|API\s*Key\s*无效|missing_api_key|authentication|unauthorized/i.test(
+    text,
+  );
 }
 
 if (typeof module !== "undefined") {

@@ -63,7 +63,7 @@ Panel {
   }
 
   function tooltipText() {
-    return Model.tooltipText(report, range, loading, loadError, uiLocale)
+    return Model.tooltipText(report, range, loading, loadError, uiLocale, Locale)
   }
 
   function dashboardUrl() {
@@ -71,7 +71,7 @@ Panel {
   }
 
   function periodMeta() {
-    var meta = Model.periodMetaLabel(range, uiLocale)
+    var meta = Model.periodMetaLabel(range, uiLocale, Locale)
     if (!currentReport)
       return meta + " · " + Locale.t(
         loading ? "status.loading" : "status.unavailable",
@@ -175,14 +175,15 @@ Panel {
       lastSuccessfulMs = Date.now()
       nowMs = lastSuccessfulMs
     } else if (parsed.ok) {
-      loadError = Locale.t("error.rangeMismatch", null, uiLocale)
+      loadError = Locale.errorText("range_mismatch", null, uiLocale)
       initRequired = false
     } else {
-      var detail = String(parsed.error || commandStderr || "").trim()
-      loadError = Model.autoTextSafe(
-        detail || Locale.t("error.generic", null, uiLocale),
-      )
-      initRequired = Model.requiresInit(loadError)
+      var errorCode = parsed.errorCode
+      if (!errorCode)
+        errorCode = Locale.errorCodeFromMessage(parsed.error || commandStderr)
+      errorCode = Locale.normalizeErrorCode(errorCode)
+      loadError = Locale.errorText(errorCode, null, uiLocale)
+      initRequired = Locale.requiresInit(errorCode)
     }
     loading = false
     if (refreshQueued) {
@@ -350,7 +351,7 @@ Panel {
 
               Button {
                 required property string modelData
-                text: Model.periodLabel(modelData, root.uiLocale)
+                text: Model.periodLabel(modelData, root.uiLocale, Locale)
                 selected: root.range === modelData
                 bordered: true
                 foreground: root.foreground
@@ -643,7 +644,8 @@ Panel {
             text: Model.updatedText(
               root.currentReport ? root.currentReport.fetchedAt : "",
               root.nowMs,
-              root.uiLocale
+              root.uiLocale,
+              Locale
             ) + (root.loading
               ? " · " + Locale.t("status.refreshing", null, root.uiLocale)
               : "")

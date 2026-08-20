@@ -77,7 +77,9 @@ Successful JSON contains `totals` (cost, computed tokens, cache-only tokens, ses
 inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens
 ```
 
-`totalTokens` is not added to this value. `cachedTokens` remains the sum of `cachedInputTokens` only. Source labels rename `pi-coding-agent` to `pi`; API-controlled labels are sanitized before they reach the UI.
+When all component fields are present, `totalTokens` is not added to this value. If any component field is omitted, the helper falls back to `totalTokens + cachedInputTokens` so the displayed volume is not lost. `cachedTokens` remains the sum of `cachedInputTokens` only. Source labels rename `pi-coding-agent` to `pi`; API-controlled labels are sanitized before they reach the UI.
+
+Failure responses include a stable `code` such as `authentication`, `network_error`, or `invalid_json`. The UI translates that code for the active desktop locale instead of displaying the helper's raw error text.
 
 ## Panel
 

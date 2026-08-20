@@ -77,7 +77,9 @@ python3 helper/usage.py --range today|24h|7d|30d
 inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens
 ```
 
-不会再把 `totalTokens` 加到这个结果上。`cachedTokens` 仍然只统计 `cachedInputTokens`。来源名称会把 `pi-coding-agent` 显示为 `pi`；来自 API 的标签在显示前会经过安全处理。
+当所有组成字段都存在时，不会再把 `totalTokens` 加到这个结果上。如果缺少任意组成字段，辅助程序会回退到 `totalTokens + cachedInputTokens`，避免显示的用量变成零。`cachedTokens` 仍然只统计 `cachedInputTokens`。来源名称会把 `pi-coding-agent` 显示为 `pi`；来自 API 的标签在显示前会经过安全处理。
+
+失败响应会包含稳定的 `code`，例如 `authentication`、`network_error` 或 `invalid_json`。界面会按照当前桌面语言翻译这个 code，而不会直接显示辅助程序的原始错误文本。
 
 ## 面板
 

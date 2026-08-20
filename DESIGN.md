@@ -125,8 +125,17 @@ Success:
 Failure:
 
 ```json
-{ "ok": false, "error": "API Key 无效，请运行 vibe-usage init" }
+{
+  "ok": false,
+  "code": "authentication",
+  "error": "API Key 无效，请运行 vibe-usage init"
+}
 ```
+
+`code` is the stable UI-facing category. QML maps it through `Locale.js` and
+never displays the helper's localized `error` text directly; this keeps English
+UI free of Chinese helper copy while preserving an actionable message for
+older callers and logs.
 
 Rules:
 
@@ -135,7 +144,7 @@ Rules:
 | `today` | `from=` local midnight + `tz=`. Hourly buckets. |
 | `24h` | `days=1` + `tz=`. Rolling 24 hourly buckets. |
 | `7d` / `30d` | `days=N` + `tz=`. Local calendar days (bucketStart is local midnight as UTC). |
-| `tokens` | Sum of `inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens` (the Mac `computedTotal`; never add `totalTokens` on top) |
+| `tokens` | Sum of `inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens` (the Mac `computedTotal`; never add `totalTokens` on top when components are present). If any component is omitted, use `totalTokens + cachedInputTokens` as a compatibility fallback. |
 | `cachedTokens` | Sum of `cachedInputTokens` only |
 | `cost` | Sum of `estimatedCost` |
 | `sessions` | Session count in the fetched payload |

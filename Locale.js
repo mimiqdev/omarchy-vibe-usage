@@ -26,6 +26,14 @@ var en = {
   "action.dashboard": "Open dashboard",
   "error.stalePrefix": "Refresh failed; showing the previous report. ",
   "error.rangeMismatch": "The helper returned a different usage range.",
+  "error.missingApiKey": "Vibe Usage is not configured. Run `vibe-usage init` to configure your API key, then refresh.",
+  "error.authentication": "The API key was rejected. Run `vibe-usage init` to configure it again.",
+  "error.invalidRange": "Unsupported usage range.",
+  "error.invalidApiUrl": "The configured API address is invalid.",
+  "error.http": "The usage service returned an HTTP error.",
+  "error.network": "Could not reach the usage service.",
+  "error.invalidJson": "The usage service returned invalid JSON.",
+  "error.invalidResponse": "The usage service returned an unsupported report.",
   "error.generic": "Unable to load Vibe Usage.",
   "empty.noUsage": "No usage recorded in this period.",
   "empty.noTrend": "No trend data.",
@@ -70,6 +78,14 @@ var zhCN = {
   "action.dashboard": "打开仪表盘",
   "error.stalePrefix": "刷新失败，显示上一次报告。",
   "error.rangeMismatch": "辅助程序返回了不同的用量范围。",
+  "error.missingApiKey": "Vibe Usage 尚未配置。运行 `vibe-usage init` 配置 API 密钥，然后刷新。",
+  "error.authentication": "API Key 被拒绝。请运行 `vibe-usage init` 重新配置。",
+  "error.invalidRange": "不支持的用量范围。",
+  "error.invalidApiUrl": "配置的 API 地址无效。",
+  "error.http": "用量服务返回了 HTTP 错误。",
+  "error.network": "无法连接到用量服务。",
+  "error.invalidJson": "用量服务返回了无效 JSON。",
+  "error.invalidResponse": "用量服务返回了不支持的报告格式。",
   "error.generic": "无法加载 Vibe Usage。",
   "empty.noUsage": "此时间段没有用量记录。",
   "empty.noTrend": "没有趋势数据。",
@@ -93,6 +109,19 @@ var zhCN = {
 };
 
 var tables = { en: en, "zh-CN": zhCN };
+
+var ERROR_KEYS = {
+  missing_api_key: "error.missingApiKey",
+  authentication: "error.authentication",
+  invalid_range: "error.invalidRange",
+  invalid_api_url: "error.invalidApiUrl",
+  http_error: "error.http",
+  network_error: "error.network",
+  invalid_json: "error.invalidJson",
+  invalid_response: "error.invalidResponse",
+  range_mismatch: "error.rangeMismatch",
+  generic: "error.generic",
+};
 
 function normalizeLocale(value) {
   var name = String(value === undefined || value === null ? "" : value)
@@ -127,6 +156,46 @@ function t(key, params, locale) {
   return interpolate(text, values);
 }
 
+function normalizeErrorCode(value) {
+  var code = String(value === undefined || value === null ? "" : value)
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  return ERROR_KEYS[code] ? code : "generic";
+}
+
+function errorCodeFromMessage(value) {
+  var text = String(value || "");
+  if (
+    /未配置\s*API\s*Key|missing.*api\s*key|not configured|isn't configured/i.test(
+      text,
+    )
+  )
+    return "missing_api_key";
+  if (/API\s*Key\s*无效|authentication|unauthorized|rejected|\b401\b/i.test(text))
+    return "authentication";
+  if (/不支持的用量范围|unsupported.*range|different usage range/i.test(text))
+    return "invalid_range";
+  if (/配置中的 API 地址无效|invalid.*api.*(url|address)/i.test(text))
+    return "invalid_api_url";
+  if (/HTTP\s*\d+|http error/i.test(text)) return "http_error";
+  if (/网络请求失败|network|could not reach/i.test(text)) return "network_error";
+  if (/无效 JSON|invalid json/i.test(text)) return "invalid_json";
+  if (/返回格式无效|unsupported report|unsupported.*format/i.test(text))
+    return "invalid_response";
+  return "generic";
+}
+
+function errorText(code, params, locale) {
+  var selected = normalizeErrorCode(code);
+  return t(ERROR_KEYS[selected], params, locale);
+}
+
+function requiresInit(code) {
+  var selected = normalizeErrorCode(code);
+  return selected === "missing_api_key" || selected === "authentication";
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     en: en,
@@ -135,5 +204,9 @@ if (typeof module !== "undefined") {
     normalizeLocale: normalizeLocale,
     interpolate: interpolate,
     t: t,
+    normalizeErrorCode: normalizeErrorCode,
+    errorCodeFromMessage: errorCodeFromMessage,
+    errorText: errorText,
+    requiresInit: requiresInit,
   };
 }
