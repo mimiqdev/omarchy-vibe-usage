@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "Locale.js" as Locale
 
 // The bar slot owns routing and injects its button into the panel. Keeping the
 // panel in a Loader lets the same widget identity participate in popout
@@ -8,6 +9,7 @@ import qs.Ui
 BarWidget {
   id: root
   moduleName: "mimiqdev.vibe-usage"
+  readonly property string uiLocale: Locale.normalizeLocale(Qt.locale().name)
 
   readonly property var panelItem: panelLoader.item
   readonly property bool opened: panelItem ? panelItem.opened === true : false
@@ -77,7 +79,9 @@ BarWidget {
     text: root.panelItem ? root.panelItem.barText() : "…"
     fontSize: Style.font.bodySmall
     active: root.panelItem ? root.panelItem.alarming : false
-    tooltipText: root.panelItem ? root.panelItem.tooltipText() : "Vibe Usage"
+    tooltipText: root.panelItem
+      ? root.panelItem.tooltipText()
+      : Locale.t("brand", null, root.uiLocale)
     horizontalMargin: 8.5
 
     onPressed: function(buttonCode) {

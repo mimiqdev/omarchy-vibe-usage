@@ -339,10 +339,24 @@ def _cost(value: Any) -> float:
 
 
 def _tokens(value: Any) -> int | float:
-    # totalTokens is an integer in the API. Preserve fractional test fixtures
-    # rather than silently truncating malformed data, while normal responses
-    # serialize as compact integers.
     return _tidy(_non_negative(value))
+
+
+def computed_total_tokens(bucket: Mapping[str, Any]) -> int | float:
+    """Match the website/Mac ``computedTotal`` token definition.
+
+    ``totalTokens`` is a billed-total field and does not include every token
+    category shown by the official usage clients. The displayed token total is
+    input + output + reasoning output + cached input; cached input is also
+    retained separately for the cache card.
+    """
+    fields = (
+        "inputTokens",
+        "outputTokens",
+        "reasoningOutputTokens",
+        "cachedInputTokens",
+    )
+    return _tokens(sum(_number(bucket.get(field)) for field in fields))
 
 
 def source_label(value: Any) -> str:
@@ -487,7 +501,7 @@ def _series(
         )
         group["cost"] = _tidy(_number(group["cost"]) + _cost(bucket.get("estimatedCost")))
         group["tokens"] = _tokens(
-            _number(group["tokens"]) + _number(_tokens(bucket.get("totalTokens")))
+            _number(group["tokens"]) + _number(computed_total_tokens(bucket))
         )
 
     result: list[dict[str, int | float | str]] = []
@@ -525,7 +539,7 @@ def build_window(
 
     for bucket in bucket_values:
         cost = _cost(bucket.get("estimatedCost"))
-        tokens = _tokens(bucket.get("totalTokens"))
+        tokens = computed_total_tokens(bucket)
         cached = _tokens(bucket.get("cachedInputTokens"))
         total_cost += cost
         total_tokens = _tokens(_number(total_tokens) + _number(tokens))

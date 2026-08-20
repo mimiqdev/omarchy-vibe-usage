@@ -43,14 +43,20 @@ class HelperTests(unittest.TestCase):
             "hasAnyData": True,
             "buckets": [
                 {"source": "pi-coding-agent", "model": "gpt-5", "hostname": "Work",
-                 "bucketStart": "2026-08-20T01:00:00+08:00", "totalTokens": 1000,
-                 "cachedInputTokens": 250, "estimatedCost": 1.25},
+                 "bucketStart": "2026-08-20T01:00:00+08:00", "totalTokens": 999,
+                 "inputTokens": 600, "outputTokens": 100,
+                 "reasoningOutputTokens": 50, "cachedInputTokens": 250,
+                 "estimatedCost": 1.25},
                 {"source": "cursor", "model": "grok", "hostname": "Home",
-                 "bucketStart": "2026-08-20T01:00:00+08:00", "totalTokens": 2000,
-                 "cachedInputTokens": 500, "estimatedCost": 2.75},
+                 "bucketStart": "2026-08-20T01:00:00+08:00", "totalTokens": 1,
+                 "inputTokens": 1000, "outputTokens": 500,
+                 "reasoningOutputTokens": 250, "cachedInputTokens": 500,
+                 "estimatedCost": 2.75},
                 {"source": "pi-coding-agent", "model": "gpt-5", "hostname": "Work",
-                 "bucketStart": "2026-08-20T02:00:00+08:00", "totalTokens": 300,
-                 "cachedInputTokens": 100, "estimatedCost": 1},
+                 "bucketStart": "2026-08-20T02:00:00+08:00", "totalTokens": 999,
+                 "inputTokens": 100, "outputTokens": 50,
+                 "reasoningOutputTokens": 50, "cachedInputTokens": 100,
+                 "estimatedCost": 1},
             ],
             "sessions": [
                 {"source": "pi-coding-agent", "hostname": "Work", "activeSeconds": 600},
@@ -68,16 +74,17 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(report["range"], "today")
         self.assertEqual(report["totals"], {
             "cost": 5,
-            "tokens": 3300,
+            "tokens": 3550,
             "cachedTokens": 850,
             "sessions": 2,
             "activeSeconds": 1800,
         })
         self.assertEqual(report["series"], [
-            {"key": "2026-08-20T01:00:00+08:00", "label": "01:00", "cost": 4, "tokens": 3000},
+            {"key": "2026-08-20T01:00:00+08:00", "label": "01:00", "cost": 4, "tokens": 3250},
             {"key": "2026-08-20T02:00:00+08:00", "label": "02:00", "cost": 1, "tokens": 300},
         ])
         self.assertEqual(report["bySource"][0]["name"], "cursor")
+        self.assertEqual(report["bySource"][0]["tokens"], 2250)
         self.assertEqual(report["bySource"][1]["name"], "pi")
         self.assertEqual(report["bySource"][0]["sessions"], 1)
         self.assertEqual(report["byHost"][0]["name"], "Home")
@@ -88,10 +95,14 @@ class HelperTests(unittest.TestCase):
         data = {
             "buckets": [
                 {"source": "codex", "model": "gpt", "hostname": "Work",
-                 "bucketStart": "2026-08-18T00:00:00.000Z", "totalTokens": 100,
+                 "bucketStart": "2026-08-18T00:00:00.000Z", "totalTokens": 1,
+                 "inputTokens": 40, "outputTokens": 30,
+                 "reasoningOutputTokens": 10, "cachedInputTokens": 20,
                  "estimatedCost": 1},
                 {"source": "codex", "model": "gpt", "hostname": "Work",
-                 "bucketStart": "2026-08-19T00:00:00.000Z", "totalTokens": 200,
+                 "bucketStart": "2026-08-19T00:00:00.000Z", "totalTokens": 2,
+                 "inputTokens": 80, "outputTokens": 50,
+                 "reasoningOutputTokens": 20, "cachedInputTokens": 50,
                  "estimatedCost": 2},
             ],
             "sessions": [],
@@ -106,7 +117,9 @@ class HelperTests(unittest.TestCase):
     def test_top_eight_and_other(self):
         buckets = [
             {"source": f"tool-{i}", "model": f"model-{i}", "hostname": f"host-{i}",
-             "bucketStart": "2026-08-20T01:00:00+08:00", "totalTokens": i + 1,
+             "bucketStart": "2026-08-20T01:00:00+08:00", "totalTokens": 999,
+             "inputTokens": i + 1, "outputTokens": 0,
+             "reasoningOutputTokens": 0, "cachedInputTokens": 0,
              "estimatedCost": i + 1}
             for i in range(10)
         ]

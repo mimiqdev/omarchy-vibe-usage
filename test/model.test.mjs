@@ -64,6 +64,8 @@ assert.equal(Model.periodLabel("today"), "Today");
 assert.equal(Model.periodLabel("24h"), "24H");
 assert.equal(Model.periodLabel("7d"), "7D");
 assert.equal(Model.periodLabel("30d"), "30D");
+assert.equal(Model.periodLabel("today", "zh-CN"), "今天");
+assert.equal(Model.periodMetaLabel("24h", "zh-CN"), "24小时");
 assert.equal(
   Model.barText(report, "today", true, false, false, ""),
   "$117.95 · 43.8M",
@@ -82,6 +84,18 @@ assert.equal(
 assert.equal(
   Model.tooltipText(report, "today", false, ""),
   "Today · $117.95 · 43.8M tokens",
+);
+assert.equal(
+  Model.tooltipText(report, "today", false, "", "zh-CN"),
+  "今天 · $117.95 · 43.8M 令牌",
+);
+assert.equal(
+  Model.updatedText(
+    "2026-08-20T10:00:00+08:00",
+    Date.parse("2026-08-20T10:03:00+08:00"),
+    "zh-CN",
+  ),
+  "3 分钟前更新",
 );
 assert.equal(Model.maxSeriesCost(report.series), 12);
 

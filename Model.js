@@ -181,20 +181,80 @@ function formatActive(value) {
   return Math.round(seconds) + "s";
 }
 
-function periodLabel(period) {
-  var range = normalizeRange(period);
-  if (range === "today") return "Today";
-  if (range === "24h") return "24H";
-  if (range === "7d") return "7D";
-  return "30D";
+// Keep the pure formatter usable from Node. Panel.qml uses Locale.js for its
+// static strings; these mirrored lookups let Model.js format complete
+// sentences without depending on QML globals or a module loader.
+var MODEL_STRINGS = {
+  en: {
+    brand: "Vibe Usage",
+    "tooltip.unavailable": "Vibe Usage unavailable",
+    "tooltip.loading": "Vibe Usage · loading",
+    "period.today": "Today",
+    "period.24h": "24H",
+    "period.7d": "7D",
+    "period.30d": "30D",
+    "period.meta.today": "Today",
+    "period.meta.24h": "24 hours",
+    "period.meta.7d": "7 days",
+    "period.meta.30d": "30 days",
+    "status.stale": "stale",
+    "status.updatedUnavailable": "updated time unavailable",
+    "status.updatedJustNow": "updated just now",
+    "status.updatedMinutes": "updated {minutes}m ago",
+    "status.updatedHours": "updated {hours}h ago",
+    "status.updatedDays": "updated {days}d ago",
+    "tooltip.tokens": "tokens",
+  },
+  "zh-CN": {
+    brand: "Vibe Usage",
+    "tooltip.unavailable": "Vibe Usage 不可用",
+    "tooltip.loading": "Vibe Usage · 加载中",
+    "period.today": "今天",
+    "period.24h": "24小时",
+    "period.7d": "7天",
+    "period.30d": "30天",
+    "period.meta.today": "今天",
+    "period.meta.24h": "24小时",
+    "period.meta.7d": "7天",
+    "period.meta.30d": "30天",
+    "status.stale": "数据已过期",
+    "status.updatedUnavailable": "更新时间不可用",
+    "status.updatedJustNow": "刚刚更新",
+    "status.updatedMinutes": "{minutes} 分钟前更新",
+    "status.updatedHours": "{hours} 小时前更新",
+    "status.updatedDays": "{days} 天前更新",
+    "tooltip.tokens": "令牌",
+  },
+};
+
+function normalizeUiLocale(value) {
+  var name = String(value === undefined || value === null ? "" : value)
+    .trim()
+    .replace(/_/g, "-")
+    .toLowerCase();
+  return name.indexOf("zh") === 0 ? "zh-CN" : "en";
 }
 
-function periodMetaLabel(period) {
-  var range = normalizeRange(period);
-  if (range === "today") return "Today";
-  if (range === "24h") return "24 hours";
-  if (range === "7d") return "7 days";
-  return "30 days";
+function localizedText(key, params, locale) {
+  var selected = normalizeUiLocale(locale);
+  var text = MODEL_STRINGS[selected][key] || MODEL_STRINGS.en[key] || String(key);
+  if (!params || typeof params !== "object") return text;
+  return text.replace(/\{([A-Za-z0-9_]+)\}/g, function(match, name) {
+    var value = params[name];
+    return value === undefined || value === null ? match : String(value);
+  });
+}
+
+function periodLabel(period, locale) {
+  return localizedText("period." + normalizeRange(period), null, locale);
+}
+
+function periodMetaLabel(period, locale) {
+  return localizedText(
+    "period.meta." + normalizeRange(period),
+    null,
+    locale,
+  );
 }
 
 function barText(report, period, showTokens, vertical, loading, error) {
@@ -221,38 +281,48 @@ function barText(report, period, showTokens, vertical, loading, error) {
   return text;
 }
 
-function tooltipText(report, period, loading, error) {
+function tooltipText(report, period, loading, error, locale) {
   var current = windowFor(report, period);
   if (!current) {
-    if (error) return "Vibe Usage unavailable";
-    if (loading) return "Vibe Usage · loading";
-    return "Vibe Usage";
+    if (error) return localizedText("tooltip.unavailable", null, locale);
+    if (loading) return localizedText("tooltip.loading", null, locale);
+    return localizedText("brand", null, locale);
   }
   var totals = current.totals;
   var text =
-    periodMetaLabel(period) +
+    periodMetaLabel(period, locale) +
     " · " +
     formatCost(totals.cost, false) +
     " · " +
     formatTokens(totals.tokens) +
-    " tokens";
-  if (error) text += " · stale";
+    " " +
+    localizedText("tooltip.tokens", null, locale);
+  if (error) text += " · " + localizedText("status.stale", null, locale);
   return text;
 }
 
-function updatedText(fetchedAt, nowMs) {
-  if (!fetchedAt) return "updated time unavailable";
+function updatedText(fetchedAt, nowMs, locale) {
+  if (!fetchedAt)
+    return localizedText("status.updatedUnavailable", null, locale);
   var fetched = new Date(String(fetchedAt)).getTime();
-  if (!Number.isFinite(fetched)) return "updated time unavailable";
+  if (!Number.isFinite(fetched))
+    return localizedText("status.updatedUnavailable", null, locale);
   var now = Number(nowMs);
   if (!Number.isFinite(now)) now = Date.now();
   var elapsed = Math.max(0, now - fetched);
-  if (elapsed < 60000) return "updated just now";
+  if (elapsed < 60000)
+    return localizedText("status.updatedJustNow", null, locale);
   var minutes = Math.floor(elapsed / 60000);
-  if (minutes < 60) return "updated " + minutes + "m ago";
+  if (minutes < 60)
+    return localizedText("status.updatedMinutes", { minutes: minutes }, locale);
   var hours = Math.floor(minutes / 60);
-  if (hours < 24) return "updated " + hours + "h ago";
-  return "updated " + Math.floor(hours / 24) + "d ago";
+  if (hours < 24)
+    return localizedText("status.updatedHours", { hours: hours }, locale);
+  return localizedText(
+    "status.updatedDays",
+    { days: Math.floor(hours / 24) },
+    locale,
+  );
 }
 
 function maxSeriesCost(series) {

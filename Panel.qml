@@ -3,6 +3,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "Locale.js" as Locale
 
 // The panel owns one short-lived helper process and keeps the last successful
 // report when a later request fails. The bar widget remains the shell-facing
@@ -22,6 +23,7 @@ Panel {
   readonly property color track: Style.selectedFillFor(foreground, Color.accent)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property bool vertical: bar ? bar.vertical : false
+  readonly property string uiLocale: Locale.normalizeLocale(Qt.locale().name)
 
   property var report: null
   property string range: Model.normalizeRange(setting("period", "today"))
@@ -61,7 +63,7 @@ Panel {
   }
 
   function tooltipText() {
-    return Model.tooltipText(report, range, loading, loadError)
+    return Model.tooltipText(report, range, loading, loadError, uiLocale)
   }
 
   function dashboardUrl() {
@@ -69,16 +71,32 @@ Panel {
   }
 
   function periodMeta() {
-    var meta = Model.periodMetaLabel(range)
-    if (!currentReport) return meta + " · " + (loading ? "Loading" : "Unavailable")
-    meta += " · " + totals.sessions + " sessions · "
-      + Model.formatActive(totals.activeSeconds) + " active"
-    if (loadError !== "") meta += " · stale"
+    var meta = Model.periodMetaLabel(range, uiLocale)
+    if (!currentReport)
+      return meta + " · " + Locale.t(
+        loading ? "status.loading" : "status.unavailable",
+        null,
+        uiLocale
+      )
+    meta += " · " + Locale.t(
+      "meta.summary",
+      {
+        sessions: totals.sessions,
+        active: Model.formatActive(totals.activeSeconds)
+      },
+      uiLocale
+    )
+    if (loadError !== "")
+      meta += " · " + Locale.t("status.stale", null, uiLocale)
     return meta
   }
 
   function totalLabel(index) {
-    return ["COST", "TOKENS", "CACHE", "ACTIVE"][index] || ""
+    return Locale.t(
+      ["card.cost", "card.tokens", "card.cache", "card.active"][index] || "",
+      null,
+      uiLocale
+    )
   }
 
   function totalValue(index) {
@@ -157,11 +175,13 @@ Panel {
       lastSuccessfulMs = Date.now()
       nowMs = lastSuccessfulMs
     } else if (parsed.ok) {
-      loadError = "The helper returned a different usage range."
+      loadError = Locale.t("error.rangeMismatch", null, uiLocale)
       initRequired = false
     } else {
       var detail = String(parsed.error || commandStderr || "").trim()
-      loadError = Model.autoTextSafe(detail || "Unable to load Vibe Usage.")
+      loadError = Model.autoTextSafe(
+        detail || Locale.t("error.generic", null, uiLocale),
+      )
       initRequired = Model.requiresInit(loadError)
     }
     loading = false
@@ -282,7 +302,7 @@ Panel {
 
           PanelHero {
             width: parent.width
-            title: "Vibe Usage"
+            title: Locale.t("brand", null, root.uiLocale)
             detail: root.currentReport ? Model.formatCost(root.totals.cost, false) : ""
             meta: root.periodMeta()
             foreground: root.foreground
@@ -303,7 +323,7 @@ Panel {
 
                 PanelActionButton {
                   iconText: "󰑐"
-                  tooltipText: "Refresh usage"
+                  tooltipText: Locale.t("action.refresh", null, root.uiLocale)
                   foreground: root.foreground
                   fontFamily: root.fontFamily
                   enabled: !usageProcess.running
@@ -312,7 +332,7 @@ Panel {
 
                 PanelActionButton {
                   iconText: "↗"
-                  tooltipText: "Open dashboard"
+                  tooltipText: Locale.t("action.dashboard", null, root.uiLocale)
                   foreground: root.foreground
                   fontFamily: root.fontFamily
                   onClicked: root.openDashboard()
@@ -330,7 +350,7 @@ Panel {
 
               Button {
                 required property string modelData
-                text: Model.periodLabel(modelData)
+                text: Model.periodLabel(modelData, root.uiLocale)
                 selected: root.range === modelData
                 bordered: true
                 foreground: root.foreground
@@ -357,7 +377,7 @@ Panel {
               anchors.leftMargin: Style.space(12)
               anchors.rightMargin: Style.space(12)
               text: root.currentReport
-                ? "Refresh failed; showing the previous report. " + root.loadError
+                ? Locale.t("error.stalePrefix", null, root.uiLocale) + root.loadError
                 : root.loadError
               textFormat: Text.PlainText
               color: root.dim
@@ -411,7 +431,7 @@ Panel {
 
             PanelSeparator { width: parent.width; foreground: root.foreground }
             PanelSectionHeader {
-              text: "TREND"
+              text: Locale.t("section.trend", null, root.uiLocale)
               foreground: root.foreground
               fontFamily: root.fontFamily
             }
@@ -468,7 +488,9 @@ Panel {
               Text {
                 visible: root.series.length === 0
                 anchors.fill: parent
-                text: root.emptyReport ? "No usage recorded in this period." : "No trend data."
+                text: root.emptyReport
+                  ? Locale.t("empty.noUsage", null, root.uiLocale)
+                  : Locale.t("empty.noTrend", null, root.uiLocale)
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
@@ -486,7 +508,7 @@ Panel {
 
             PanelSeparator { width: parent.width; foreground: root.foreground }
             PanelSectionHeader {
-              text: "BY TOOL"
+              text: Locale.t("section.tool", null, root.uiLocale)
               foreground: root.foreground
               fontFamily: root.fontFamily
             }
@@ -515,7 +537,7 @@ Panel {
 
             PanelSeparator { width: parent.width; foreground: root.foreground }
             PanelSectionHeader {
-              text: "BY MODEL"
+              text: Locale.t("section.model", null, root.uiLocale)
               foreground: root.foreground
               fontFamily: root.fontFamily
             }
@@ -544,7 +566,7 @@ Panel {
 
             PanelSeparator { width: parent.width; foreground: root.foreground }
             PanelSectionHeader {
-              text: "BY HOST"
+              text: Locale.t("section.host", null, root.uiLocale)
               foreground: root.foreground
               fontFamily: root.fontFamily
             }
@@ -572,7 +594,7 @@ Panel {
 
             Text {
               width: parent.width
-              text: "Vibe Usage isn't configured"
+              text: Locale.t("init.title", null, root.uiLocale)
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.title
@@ -582,7 +604,7 @@ Panel {
 
             Text {
               width: parent.width
-              text: "Run `vibe-usage init` to configure your API key, then refresh."
+              text: Locale.t("init.instructions", null, root.uiLocale)
               textFormat: Text.PlainText
               color: root.dim
               font.family: root.fontFamily
@@ -596,7 +618,7 @@ Panel {
             visible: !root.currentReport && !root.loading && !root.showInitState
               && root.loadError === ""
             width: parent.width
-            text: "No Vibe Usage report available."
+            text: Locale.t("empty.noReport", null, root.uiLocale)
             textFormat: Text.PlainText
             color: root.dim
             font.family: root.fontFamily
@@ -608,7 +630,7 @@ Panel {
           Text {
             visible: !root.currentReport && root.loading
             width: parent.width
-            text: "Collecting Vibe Usage…"
+            text: Locale.t("loading.collecting", null, root.uiLocale)
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.body
@@ -618,8 +640,13 @@ Panel {
           Text {
             visible: root.currentReport
             width: parent.width
-            text: Model.updatedText(root.currentReport ? root.currentReport.fetchedAt : "", root.nowMs)
-              + (root.loading ? " · refreshing…" : "")
+            text: Model.updatedText(
+              root.currentReport ? root.currentReport.fetchedAt : "",
+              root.nowMs,
+              root.uiLocale
+            ) + (root.loading
+              ? " · " + Locale.t("status.refreshing", null, root.uiLocale)
+              : "")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
