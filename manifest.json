@@ -15,7 +15,7 @@
   },
   "barWidget": {
     "displayName": "Vibe Usage",
-    "description": "Today's Vibe Usage spend with a seven-day detail panel.",
+    "description": "Vibe Usage spend with local-range detail and trend bars.",
     "category": "AI",
     "allowMultiple": false,
     "defaultSection": "right",
@@ -30,7 +30,7 @@
         "key": "period",
         "type": "string",
         "label": "Pill period",
-        "description": "The period shown in the bar pill. The panel can switch periods without changing this setting.",
+        "description": "The range shown in the bar pill. The panel can switch ranges without changing this setting.",
         "defaultValue": "today",
         "options": [
           {
@@ -38,8 +38,16 @@
             "label": "Today"
           },
           {
+            "value": "24h",
+            "label": "24 hours"
+          },
+          {
             "value": "7d",
             "label": "7 days"
+          },
+          {
+            "value": "30d",
+            "label": "30 days"
           }
         ]
       },

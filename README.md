@@ -1,10 +1,8 @@
 # Vibe Usage Omarchy plugin
 
-A third-party Omarchy 4 `bar-widget` for [vibe-usage](https://github.com/vibe-cafe/vibe-usage). It shows today's spend and tokens in the bar, with a panel for today or the last seven days split by model and tool.
+A third-party Omarchy 4 `bar-widget` for [vibe-usage](https://github.com/vibe-cafe/vibe-usage). It shows spend and tokens in the bar, with a local-time panel for Today, 24H, 7D, or 30D.
 
-Today is the machine's local calendar day, built from the hourly `days=1` API. The seven-day view uses the daily `days=7` rollup.
-
-This plugin is display-only. The `vibe-usage` daemon continues to sync local records; the plugin makes one read-only API request when it refreshes.
+The plugin is display-only. The `vibe-usage` daemon continues to sync local records; the plugin makes one read-only API request when it refreshes.
 
 ## Requirements
 
@@ -13,7 +11,7 @@ This plugin is display-only. The `vibe-usage` daemon continues to sync local rec
 - `~/.vibe-usage/config.json` created by `vibe-usage init`
 - A running `vibe-usage` daemon (recommended)
 
-The helper reads the API key itself and never passes it through QML, argv, or environment variables.
+The helper reads the API key itself and never passes it through QML, argv, or environment variables. Every request includes the machine's local IANA timezone so calendar ranges match the desktop.
 
 ## Install locally
 
@@ -38,12 +36,27 @@ The plugin id is `cafe.vibe.usage`; do not edit `/usr/share/omarchy/`.
 
 - Left click: open or close the detail panel
 - Right click: open `https://vibecafe.ai/usage`
-- Middle click or `r`: refresh
-- `h`/`l` or the period chips: switch Today / 7 days without refetching
+- Middle click or `r`: refresh the current range
+- `h`/`l` or the range chips: switch Today / 24H / 7D / 30D and refetch
 - `↗`: open the dashboard and close the panel
 - `Esc`: close; `Tab`: move to the neighboring bar panel
 
-A failed refresh keeps the last successful report visible and marks the panel stale. With no cached report, loading displays `…` and an error displays `!`.
+A failed refresh keeps the last successful report for that range visible and marks the panel stale. With no cached report, loading displays `…` and an error displays `!`. Missing configuration or a rejected key shows instructions to run `vibe-usage init`.
+
+## Helper contract
+
+```sh
+python3 helper/usage.py --range today|24h|7d|30d
+```
+
+The helper performs one request per invocation:
+
+- `today`: `from=<local midnight as UTC ISO>&tz=<IANA id>`
+- `24h`: `days=1&tz=<IANA id>`
+- `7d`: `days=7&tz=<IANA id>`
+- `30d`: `days=30&tz=<IANA id>`
+
+The successful JSON contains `totals` (cost, tokens, cached tokens, sessions, active time), chronological `series` bars, and top-eight `byHost`, `bySource`, and `byModel` lists. Token totals sum `totalTokens`; cache is reported separately from `cachedInputTokens`.
 
 ## Tests
 
@@ -51,7 +64,7 @@ A failed refresh keeps the last successful report visible and marks the panel st
 python3 test/helper.test.py
 node test/model.test.mjs
 omarchy plugin validate .
-git diff --check 95c340d37b652cfe30a8272662cb63de35b747ec..HEAD
+git diff --check
 ```
 
 The tests use local fixtures and mocked HTTP responses. No API key is required or committed.

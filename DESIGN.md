@@ -17,7 +17,9 @@ Third-party Omarchy 4 `bar-widget` that shows [vibe-usage](https://github.com/vi
 
 Bar pill for today's cost + tokens, click panel (overview / by model / by tool), right-click opens the dashboard, middle-click refreshes, stale-on-failure.
 
-## Phase 2 (next)
+Phase 2 adds local-time range selection, cache and active-time cards, trend bars, and host grouping.
+
+## Phase 2 (shipped)
 
 Follow the official Mac popover **order**, not its pixels. One API request per selected range, always with `tz=`.
 
@@ -144,7 +146,7 @@ Rules:
 API shape (already verified):
 
 ```
-GET {apiUrl}/api/usage?days=7
+GET {apiUrl}/api/usage?<range query>&tz=<local IANA id>
 Authorization: Bearer vbu_...
 
 { hasAnyData, buckets[], sessions[] }
@@ -218,7 +220,7 @@ Refresh: timer `refreshIntervalSec` (default 120, clamp 30–600). On open, refe
 }
 ```
 
-`period` only sets the **pill** default. Panel can switch Today/7d without writing settings.
+`period` only sets the **pill** default. The panel can switch Today/24H/7D/30D without writing settings.
 
 ## QML
 
@@ -253,7 +255,7 @@ Never edit `/usr/share/omarchy/`.
 
 ## Tests
 
-- `test/helper.test.py`: fixtures for today vs 7d split, top-8+Other, 401, missing key, source rename. Live API optional, never commit the key.
+- `test/helper.test.py`: range queries with timezone, totals/cache/series, top-8+Other, 401, missing key, source rename. Live API optional, never commit the key.
 - `test/model.test.mjs`: parse + format + barText + sanitization.
 - `omarchy plugin validate <plugin-dir>`
 - `git diff --check <base_commit>..HEAD`

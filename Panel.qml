@@ -4,8 +4,9 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 
-// The panel owns one helper process and keeps the last successful report when
-// a later request fails. The bar widget remains the shell-facing identity.
+// The panel owns one short-lived helper process and keeps the last successful
+// report when a later request fails. The bar widget remains the shell-facing
+// identity.
 Panel {
   id: root
   moduleName: "cafe.vibe.usage"
@@ -23,12 +24,16 @@ Panel {
   readonly property bool vertical: bar ? bar.vertical : false
 
   property var report: null
-  property string period: setting("period", "today") === "7d" ? "7d" : "today"
+  property string range: Model.normalizeRange(setting("period", "today"))
   property bool loading: true
   property bool refreshQueued: false
+  property bool restartRequested: false
+  property int requestSerial: 0
+  property int activeRequest: 0
   property string commandStdout: ""
   property string commandStderr: ""
   property string loadError: ""
+  property bool initRequired: false
   property double lastSuccessfulMs: 0
   property double nowMs: Date.now()
 
@@ -36,57 +41,71 @@ Panel {
     Number(setting("refreshIntervalSec", 120)) || 120))
   readonly property bool showTokens: setting("showTokens", true) !== false
   readonly property bool hideWhenEmpty: setting("hideWhenEmpty", false) === true
-  readonly property var currentWindow: Model.windowFor(report, period)
-  readonly property var totals: currentWindow ? currentWindow.totals
-    : ({ cost: 0, tokens: 0, sessions: 0, activeSeconds: 0 })
-  readonly property bool emptyReport: currentWindow
-    && totals.cost === 0 && totals.tokens === 0 && totals.sessions === 0
-    && totals.activeSeconds === 0
+  readonly property bool reportMatchesRange: !!(report && report.ok === true
+    && report.range === range)
+  readonly property var currentReport: reportMatchesRange ? report : null
+  readonly property var totals: currentReport ? currentReport.totals
+    : ({ cost: 0, tokens: 0, cachedTokens: 0, sessions: 0, activeSeconds: 0 })
+  readonly property var series: currentReport ? currentReport.series : []
+  readonly property real maxSeriesCost: Model.maxSeriesCost(series)
+  readonly property bool emptyReport: !!currentReport
+    && totals.cost === 0 && totals.tokens === 0 && totals.cachedTokens === 0
+    && totals.sessions === 0 && totals.activeSeconds === 0
+  readonly property bool showInitState: initRequired && !currentReport
+  readonly property bool showReportBody: !!currentReport && !showInitState
   readonly property bool alarming: loadError !== ""
   readonly property string label: hideWhenEmpty && emptyReport ? "" : barText()
 
   function barText() {
-    return Model.barText(report, period, showTokens, vertical, loading, loadError)
+    return Model.barText(report, range, showTokens, vertical, loading, loadError)
   }
 
   function tooltipText() {
-    return Model.tooltipText(report, period, loading, loadError)
+    return Model.tooltipText(report, range, loading, loadError)
   }
 
   function dashboardUrl() {
     return Model.safeDashboard(report ? report.dashboard : "")
   }
 
-  function periodTitle() {
-    return Model.periodLabel(period)
-  }
-
   function periodMeta() {
-    if (!currentWindow) return loading ? "Loading" : "Unavailable"
-    var meta = periodTitle() + " · " + totals.sessions + " sessions · "
+    var meta = Model.periodMetaLabel(range)
+    if (!currentReport) return meta + " · " + (loading ? "Loading" : "Unavailable")
+    meta += " · " + totals.sessions + " sessions · "
       + Model.formatActive(totals.activeSeconds) + " active"
     if (loadError !== "") meta += " · stale"
     return meta
   }
 
   function totalLabel(index) {
-    return ["COST", "TOKENS", "SESSIONS", "ACTIVE"][index] || ""
+    return ["COST", "TOKENS", "CACHE", "ACTIVE"][index] || ""
   }
 
   function totalValue(index) {
     if (index === 0) return Model.formatCost(totals.cost, false)
     if (index === 1) return Model.formatTokens(totals.tokens)
-    if (index === 2) return String(totals.sessions)
+    if (index === 2) return Model.formatTokens(totals.cachedTokens)
     return Model.formatActive(totals.activeSeconds)
   }
 
-  function setPeriod(value) {
-    period = value === "7d" ? "7d" : "today"
+  function setRange(value) {
+    var next = Model.normalizeRange(value)
+    if (range === next) return
+    range = next
+    loadError = ""
+    initRequired = false
+    lastSuccessfulMs = 0
+    loading = true
     if (panelFlick) panelFlick.contentY = 0
+    startRefresh()
   }
 
-  function switchPeriod(delta) {
-    setPeriod(delta < 0 ? "today" : "7d")
+  function switchRange(delta) {
+    var ranges = ["today", "24h", "7d", "30d"]
+    var index = ranges.indexOf(range)
+    if (index < 0) index = 0
+    index = Math.max(0, Math.min(ranges.length - 1, index + (delta < 0 ? -1 : 1)))
+    setRange(ranges[index])
   }
 
   function clamp(value, minimum, maximum) {
@@ -99,8 +118,17 @@ Panel {
     return false
   }
 
+  // Process.running=false is asynchronous. Mark the current invocation as
+  // cancelled and let onExited launch the queued one; this prevents a quick
+  // middle-click from leaving a stale helper process in control of stdout.
   function startRefresh() {
     if (usageProcess.running) {
+      refreshQueued = true
+      restartRequested = true
+      usageProcess.running = false
+      return
+    }
+    if (restartRequested) {
       refreshQueued = true
       return
     }
@@ -108,30 +136,47 @@ Panel {
     commandStdout = ""
     commandStderr = ""
     loading = true
+    activeRequest = ++requestSerial
     usageProcess.running = true
   }
 
-  function finishRefresh() {
+  function finishRefresh(requestId) {
+    if (requestId !== activeRequest) return
+    if (restartRequested) {
+      restartRequested = false
+      loading = true
+      if (refreshQueued) Qt.callLater(startRefresh)
+      return
+    }
+
     var parsed = Model.parseReport(commandStdout)
-    if (parsed.ok) {
+    if (parsed.ok && parsed.range === range) {
       report = parsed
       loadError = ""
+      initRequired = false
       lastSuccessfulMs = Date.now()
       nowMs = lastSuccessfulMs
+    } else if (parsed.ok) {
+      loadError = "The helper returned a different usage range."
+      initRequired = false
     } else {
       var detail = String(parsed.error || commandStderr || "").trim()
       loadError = Model.autoTextSafe(detail || "Unable to load Vibe Usage.")
+      initRequired = Model.requiresInit(loadError)
     }
     loading = false
-    if (refreshQueued) Qt.callLater(startRefresh)
+    if (refreshQueued) {
+      refreshQueued = false
+      Qt.callLater(startRefresh)
+    }
   }
 
   function refresh() {
     startRefresh()
   }
 
-  // Qt.resolvedUrl returns a file:// URL. Process argv needs a local path
-  // or python3 tries to open the literal URL and writes nothing to stdout.
+  // Qt.resolvedUrl returns a file:// URL. Process argv needs a local path or
+  // python3 tries to open the literal URL and writes nothing to stdout.
   function helperPath() {
     var resolved = String(Qt.resolvedUrl("helper/usage.py"))
     if (resolved.indexOf("file://") === 0) {
@@ -175,7 +220,7 @@ Panel {
   Process {
     id: usageProcess
     running: false
-    command: ["python3", root.helperPath()]
+    command: ["python3", root.helperPath(), "--range", root.range]
 
     stdout: StdioCollector {
       waitForEnd: true
@@ -188,8 +233,8 @@ Panel {
     }
 
     onExited: {
-      // Let both collectors publish their buffers before parsing stdout.
-      Qt.callLater(function() { root.finishRefresh() })
+      var finishedRequest = root.activeRequest
+      Qt.callLater(function() { root.finishRefresh(finishedRequest) })
     }
   }
 
@@ -200,15 +245,15 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(470))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(700))
+    contentWidth: panel.fittedContentWidth(Style.space(500))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(760))
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
 
       onMoveRequested: function(dx, dy) {
-        if (dx !== 0) root.switchPeriod(dx)
+        if (dx !== 0) root.switchRange(dx)
         else if (dy !== 0)
           panelFlick.contentY = root.clamp(panelFlick.contentY + dy * Style.space(56),
             0, Math.max(0, panelFlick.contentHeight - panelFlick.height))
@@ -238,7 +283,7 @@ Panel {
           PanelHero {
             width: parent.width
             title: "Vibe Usage"
-            detail: root.currentWindow ? Model.formatCost(root.totals.cost, false) : ""
+            detail: root.currentReport ? Model.formatCost(root.totals.cost, false) : ""
             meta: root.periodMeta()
             foreground: root.foreground
             fontFamily: root.fontFamily
@@ -278,31 +323,26 @@ Panel {
 
           Row {
             width: parent.width
-            spacing: Style.space(8)
+            spacing: Style.space(4)
 
-            Button {
-              text: "Today"
-              selected: root.period === "today"
-              bordered: true
-              foreground: root.foreground
-              fontFamily: root.fontFamily
-              fontSize: Style.font.bodySmall
-              onClicked: root.setPeriod("today")
-            }
+            Repeater {
+              model: ["today", "24h", "7d", "30d"]
 
-            Button {
-              text: "7 days"
-              selected: root.period === "7d"
-              bordered: true
-              foreground: root.foreground
-              fontFamily: root.fontFamily
-              fontSize: Style.font.bodySmall
-              onClicked: root.setPeriod("7d")
+              Button {
+                required property string modelData
+                text: Model.periodLabel(modelData)
+                selected: root.range === modelData
+                bordered: true
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                onClicked: root.setRange(modelData)
+              }
             }
           }
 
           BorderSurface {
-            visible: root.loadError !== ""
+            visible: root.loadError !== "" && !root.showInitState
             width: parent.width
             implicitHeight: staleText.implicitHeight + Style.space(20)
             color: Qt.rgba(root.urgent.r, root.urgent.g, root.urgent.b, 0.09)
@@ -316,7 +356,7 @@ Panel {
               anchors.verticalCenter: parent.verticalCenter
               anchors.leftMargin: Style.space(12)
               anchors.rightMargin: Style.space(12)
-              text: root.report
+              text: root.currentReport
                 ? "Refresh failed; showing the previous report. " + root.loadError
                 : root.loadError
               textFormat: Text.PlainText
@@ -329,6 +369,7 @@ Panel {
 
           Grid {
             id: totalsGrid
+            visible: root.showReportBody
             width: parent.width
             columns: 2
             columnSpacing: Style.space(28)
@@ -363,8 +404,139 @@ Panel {
           }
 
           Column {
+            id: trendSection
+            visible: root.showReportBody
+            width: parent.width
+            spacing: Style.space(8)
+
+            PanelSeparator { width: parent.width; foreground: root.foreground }
+            PanelSectionHeader {
+              text: "TREND"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            Item {
+              id: trend
+              width: parent.width
+              height: root.series.length > 0 ? Style.space(104) : Style.space(28)
+
+              Row {
+                anchors.fill: parent
+                anchors.bottomMargin: Style.space(18)
+                spacing: 1
+
+                Repeater {
+                  model: root.series
+
+                  Item {
+                    required property var modelData
+                    required property int index
+                    width: Math.max(Style.space(4), trend.width / Math.max(1, root.series.length))
+                    height: trend.height - Style.space(18)
+
+                    Rectangle {
+                      anchors.horizontalCenter: parent.horizontalCenter
+                      anchors.bottom: parent.bottom
+                      width: Math.max(Style.space(3), parent.width - 2)
+                      height: root.maxSeriesCost > 0
+                        ? Math.max(2, (Number(modelData.cost) / root.maxSeriesCost)
+                          * (parent.height - Style.space(12)))
+                        : 2
+                      radius: Math.min(2, height / 2)
+                      color: index === root.series.length - 1 ? root.foreground : root.track
+                    }
+
+                    Text {
+                      visible: index === 0 || index === root.series.length - 1
+                      anchors.top: parent.bottom
+                      anchors.topMargin: Style.space(2)
+                      width: parent.width
+                      text: modelData.label
+                      color: root.dim
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      horizontalAlignment: index === 0 ? Text.AlignLeft : Text.AlignRight
+                      elide: Text.ElideRight
+                    }
+                  }
+                }
+              }
+
+              Text {
+                visible: root.series.length === 0
+                anchors.fill: parent
+                text: root.emptyReport ? "No usage recorded in this period." : "No trend data."
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+              }
+            }
+          }
+
+          Column {
+            id: hostSection
+            visible: root.showReportBody && root.currentReport.byHost.length > 0
+            width: parent.width
+            spacing: Style.space(8)
+
+            PanelSeparator { width: parent.width; foreground: root.foreground }
+            PanelSectionHeader {
+              text: "BY HOST"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            Repeater {
+              model: root.currentReport ? root.currentReport.byHost : []
+              delegate: Item {
+                required property var modelData
+                width: hostSection.width
+                implicitHeight: hostRow.implicitHeight
+
+                SpendRow {
+                  id: hostRow
+                  width: parent.width
+                  row: modelData
+                }
+              }
+            }
+          }
+
+          Column {
+            id: sourceSection
+            visible: root.showReportBody && root.currentReport.bySource.length > 0
+            width: parent.width
+            spacing: Style.space(8)
+
+            PanelSeparator { width: parent.width; foreground: root.foreground }
+            PanelSectionHeader {
+              text: "BY TOOL"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            Repeater {
+              model: root.currentReport ? root.currentReport.bySource : []
+              delegate: Item {
+                required property var modelData
+                width: sourceSection.width
+                implicitHeight: sourceRow.implicitHeight
+
+                SpendRow {
+                  id: sourceRow
+                  width: parent.width
+                  row: modelData
+                }
+              }
+            }
+          }
+
+          Column {
             id: modelSection
-            visible: root.currentWindow && root.currentWindow.byModel.length > 0
+            visible: root.showReportBody && root.currentReport.byModel.length > 0
             width: parent.width
             spacing: Style.space(8)
 
@@ -376,7 +548,7 @@ Panel {
             }
 
             Repeater {
-              model: root.currentWindow ? root.currentWindow.byModel : []
+              model: root.currentReport ? root.currentReport.byModel : []
               delegate: Item {
                 required property var modelData
                 width: modelSection.width
@@ -392,58 +564,47 @@ Panel {
           }
 
           Column {
-            id: sourceSection
-            visible: root.currentWindow && root.currentWindow.bySource.length > 0
+            visible: root.showInitState
             width: parent.width
             spacing: Style.space(8)
 
-            PanelSeparator { width: parent.width; foreground: root.foreground }
-            PanelSectionHeader {
-              text: "BY TOOL"
-              foreground: root.foreground
-              fontFamily: root.fontFamily
+            Text {
+              width: parent.width
+              text: "Vibe Usage isn't configured"
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.title
+              font.bold: true
+              horizontalAlignment: Text.AlignHCenter
             }
 
-            Repeater {
-              model: root.currentWindow ? root.currentWindow.bySource : []
-              delegate: Item {
-                required property var modelData
-                width: sourceSection.width
-                implicitHeight: sourceRow.implicitHeight
-
-                SpendRow {
-                  id: sourceRow
-                  width: parent.width
-                  row: modelData
-                }
-              }
+            Text {
+              width: parent.width
+              text: "Run `vibe-usage init` to configure your API key, then refresh."
+              textFormat: Text.PlainText
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              wrapMode: Text.WordWrap
+              horizontalAlignment: Text.AlignHCenter
             }
           }
 
           Text {
-            visible: root.currentWindow && !root.emptyReport
-              && root.currentWindow.byModel.length === 0
-              && root.currentWindow.bySource.length === 0
+            visible: !root.currentReport && !root.loading && !root.showInitState
+              && root.loadError === ""
             width: parent.width
-            text: "No usage groups in this period."
+            text: "No Vibe Usage report available."
+            textFormat: Text.PlainText
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.body
+            wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
           }
 
           Text {
-            visible: root.currentWindow && root.emptyReport && !root.loading
-            width: parent.width
-            text: "No usage recorded in this period."
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.body
-            horizontalAlignment: Text.AlignHCenter
-          }
-
-          Text {
-            visible: !root.currentWindow && root.loading
+            visible: !root.currentReport && root.loading
             width: parent.width
             text: "Collecting Vibe Usage…"
             color: root.dim
@@ -453,9 +614,9 @@ Panel {
           }
 
           Text {
-            visible: root.report !== null
+            visible: root.currentReport
             width: parent.width
-            text: Model.updatedText(root.report ? root.report.fetchedAt : "", root.nowMs)
+            text: Model.updatedText(root.currentReport ? root.currentReport.fetchedAt : "", root.nowMs)
               + (root.loading ? " · refreshing…" : "")
             color: root.dim
             font.family: root.fontFamily
