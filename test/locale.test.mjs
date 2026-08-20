@@ -17,6 +17,8 @@ assert.equal(Locale.t("metric.cost", null, "en"), "Cost");
 assert.equal(Locale.t("metric.tokens", null, "en"), "Token");
 assert.equal(Locale.t("metric.cost", null, "zh-CN"), "费用");
 assert.equal(Locale.t("metric.tokens", null, "zh-CN"), "Token");
+assert.equal(Locale.t("loading.fetching", null, "en"), "Loading Vibe Usage…");
+assert.equal(Locale.t("loading.fetching", null, "zh-CN"), "正在获取 Vibe Usage…");
 assert.equal(Locale.t("card.cost", "zh-CN"), "费用");
 assert.equal(
   Locale.t(

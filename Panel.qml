@@ -4,6 +4,7 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 import "Locale.js" as Locale
+import "RangeCache.js" as Cache
 
 // The panel owns one short-lived helper process and keeps the last successful
 // report when a later request fails. The bar widget remains the shell-facing
@@ -25,29 +26,43 @@ Panel {
   readonly property bool vertical: bar ? bar.vertical : false
   readonly property string uiLocale: Locale.normalizeLocale(Qt.locale().name)
 
-  property var report: null
+  // Keep one independent report state per server range. Navigation only
+  // selects a state; it never overwrites another range's request or report.
+  property var rangeStates: Cache.initialStates()
   property string range: Model.normalizeRange(setting("period", "today"))
   // This is presentation-only state. Changing it never restarts the helper.
   property string metric: "cost"
-  property bool loading: true
-  property bool refreshQueued: false
-  property bool restartRequested: false
   property int requestSerial: 0
   property int activeRequest: 0
+  property string activeRequestRange: ""
+  property string processRange: ""
+  property var pendingRanges: []
+  property var pendingForce: ({})
   property string commandStdout: ""
   property string commandStderr: ""
-  property string loadError: ""
-  property bool initRequired: false
-  property double lastSuccessfulMs: 0
   property double nowMs: Date.now()
 
   readonly property int refreshIntervalSec: Math.max(30, Math.min(600,
     Number(setting("refreshIntervalSec", 120)) || 120))
   readonly property bool showTokens: setting("showTokens", true) !== false
   readonly property bool hideWhenEmpty: setting("hideWhenEmpty", false) === true
-  readonly property bool reportMatchesRange: !!(report && report.ok === true
-    && report.range === range)
-  readonly property var currentReport: reportMatchesRange ? report : null
+  readonly property var currentState: rangeStates[range] || rangeStates.today
+  readonly property var cachedReport: currentState ? currentState.report : null
+  readonly property bool reportMatchesRange: !!(cachedReport
+    && cachedReport.ok === true && cachedReport.range === range)
+  readonly property var currentReport: reportMatchesRange ? cachedReport : null
+  // Keep this compatibility property for bar/panel callers that use report.
+  readonly property var report: currentReport
+  readonly property bool loading: currentState
+    ? currentState.loading === true
+      || (!currentReport && currentState.errorCode === "")
+    : false
+  readonly property string loadError: currentState && currentState.errorCode
+    ? Locale.errorText(currentState.errorCode, null, uiLocale) : ""
+  readonly property bool initRequired: currentState
+    ? currentState.initRequired === true : false
+  readonly property double lastSuccessfulMs: currentState
+    ? Number(currentState.lastSuccessfulMs) || 0 : 0
   readonly property var totals: currentReport ? currentReport.totals
     : ({ cost: 0, tokens: 0, cachedTokens: 0, sessions: 0, activeSeconds: 0 })
   readonly property var series: currentReport ? currentReport.series : []
@@ -117,20 +132,123 @@ Panel {
     return Model.formatActive(totals.activeSeconds)
   }
 
+  function rangeNames() {
+    return Cache.rangeNames()
+  }
+
+  function rangeState(value) {
+    return Cache.stateFor(rangeStates, value)
+  }
+
+  // Assign a new map so bindings to currentState/currentReport update even
+  // though the individual cached entries are plain JavaScript objects.
+  function updateRangeState(value, changes) {
+    rangeStates = Cache.updateStates(rangeStates, value, changes)
+  }
+
+  function isRangeFresh(value) {
+    return Cache.isFresh(
+      rangeStates,
+      value,
+      Date.now(),
+      refreshIntervalSec * 1000,
+    )
+  }
+
+  function queueRange(value, force, priority) {
+    var selected = Model.normalizeRange(value)
+    var queued = Cache.enqueue(
+      pendingRanges,
+      pendingForce,
+      selected,
+      force === true,
+      priority === true,
+    )
+    pendingRanges = queued.ranges
+    pendingForce = queued.force
+    updateRangeState(selected, { loading: true })
+  }
+
+  function requestRange(value, force, priority) {
+    var selected = Model.normalizeRange(value)
+    var state = rangeState(selected)
+    // A queued or active request already covers this range. Navigation must
+    // not cancel it or create a duplicate, but a queued tab can move ahead of
+    // other background work when it becomes the visible range.
+    if (state && state.loading === true) {
+      if (selected !== activeRequestRange && priority === true
+          && pendingRanges.indexOf(selected) >= 0) {
+        var reprioritized = Cache.enqueue(
+          pendingRanges,
+          pendingForce,
+          selected,
+          force === true,
+          true,
+        )
+        pendingRanges = reprioritized.ranges
+        pendingForce = reprioritized.force
+      }
+      return false
+    }
+    if (!Cache.needsRequest(
+      rangeStates,
+      selected,
+      force === true,
+      Date.now(),
+      refreshIntervalSec * 1000,
+    )) return false
+    queueRange(selected, force === true, priority === true)
+    pumpRequests()
+    return true
+  }
+
+  function pumpRequests() {
+    if (usageProcess.running || activeRequest !== 0) return
+    while (pendingRanges.length > 0) {
+      var selected = pendingRanges.shift()
+      var force = pendingForce[selected] === true
+      delete pendingForce[selected]
+      if (force !== true && isRangeFresh(selected)) {
+        updateRangeState(selected, { loading: false })
+        continue
+      }
+      commandStdout = ""
+      commandStderr = ""
+      processRange = selected
+      activeRequestRange = selected
+      activeRequest = ++requestSerial
+      usageProcess.running = true
+      return
+    }
+  }
+
+  function refreshStaleRanges() {
+    var selected = range
+    // The selected range has priority, but only loaded ranges are considered
+    // for background refresh. Opening the panel never fetches all four.
+    requestRange(selected, false, true)
+    var names = rangeNames()
+    for (var i = 0; i < names.length; i++) {
+      var name = names[i]
+      var state = rangeState(name)
+      if (name !== selected && state && state.report && !isRangeFresh(name))
+        requestRange(name, false, false)
+    }
+  }
+
   function setRange(value) {
     var next = Model.normalizeRange(value)
-    if (range === next) return
-    loading = true
-    range = next
-    loadError = ""
-    initRequired = false
-    lastSuccessfulMs = 0
-    if (panelFlick) panelFlick.contentY = 0
-    startRefresh()
+    if (range !== next) {
+      range = next
+      if (panelFlick) panelFlick.contentY = 0
+    }
+    // A fresh report is shown immediately. Missing/stale reports are queued
+    // without discarding the selected range's previous successful report.
+    requestRange(next, false, true)
   }
 
   function switchRange(delta) {
-    var ranges = ["today", "24h", "7d", "30d"]
+    var ranges = rangeNames()
     var index = ranges.indexOf(range)
     if (index < 0) index = 0
     index = Math.max(0, Math.min(ranges.length - 1, index + (delta < 0 ? -1 : 1)))
@@ -147,64 +265,44 @@ Panel {
     return false
   }
 
-  // Process.running=false is asynchronous. Mark the current invocation as
-  // cancelled and let onExited launch the queued one; this prevents a quick
-  // middle-click from leaving a stale helper process in control of stdout.
-  function startRefresh() {
-    if (usageProcess.running) {
-      refreshQueued = true
-      restartRequested = true
-      usageProcess.running = false
-      return
-    }
-    if (restartRequested) {
-      refreshQueued = true
-      return
-    }
-    refreshQueued = false
-    commandStdout = ""
-    commandStderr = ""
-    loading = true
-    activeRequest = ++requestSerial
-    usageProcess.running = true
-  }
-
-  function finishRefresh(requestId) {
-    if (requestId !== activeRequest) return
-    if (restartRequested) {
-      restartRequested = false
-      loading = true
-      if (refreshQueued) Qt.callLater(startRefresh)
-      return
-    }
+  function finishRefresh(requestId, requestedRange) {
+    if (requestId !== activeRequest || requestedRange !== activeRequestRange) return
 
     var parsed = Model.parseReport(commandStdout)
-    if (parsed.ok && parsed.range === range) {
-      report = parsed
-      loadError = ""
-      initRequired = false
-      lastSuccessfulMs = Date.now()
-      nowMs = lastSuccessfulMs
-    } else if (parsed.ok) {
-      loadError = Locale.errorText("range_mismatch", null, uiLocale)
-      initRequired = false
+    var finishedAt = Date.now()
+    activeRequest = 0
+    activeRequestRange = ""
+    processRange = ""
+
+    if (parsed.ok && parsed.range === requestedRange) {
+      updateRangeState(requestedRange, {
+        report: parsed,
+        loading: false,
+        errorCode: "",
+        initRequired: false,
+        lastSuccessfulMs: finishedAt
+      })
+      if (requestedRange === range) nowMs = finishedAt
     } else {
-      var errorCode = parsed.errorCode
+      var errorCode = parsed.ok
+        ? "range_mismatch"
+        : parsed.errorCode
       if (!errorCode)
         errorCode = Locale.errorCodeFromMessage(parsed.error || commandStderr)
       errorCode = Locale.normalizeErrorCode(errorCode)
-      loadError = Locale.errorText(errorCode, null, uiLocale)
-      initRequired = Locale.requiresInit(errorCode)
+      // Do not replace report: a failed refresh leaves the previous report
+      // visible for this range and records only the stale/error state.
+      updateRangeState(requestedRange, {
+        loading: false,
+        errorCode: errorCode,
+        initRequired: Locale.requiresInit(errorCode)
+      })
     }
-    loading = false
-    if (refreshQueued) {
-      refreshQueued = false
-      Qt.callLater(startRefresh)
-    }
+    pumpRequests()
   }
 
   function refresh() {
-    startRefresh()
+    requestRange(range, true, true)
   }
 
   // Qt.resolvedUrl returns a file:// URL. Process argv needs a local path or
@@ -227,9 +325,9 @@ Panel {
     if (opened) {
       nowMs = Date.now()
       if (panelFlick) panelFlick.contentY = 0
-      if (lastSuccessfulMs === 0
-          || nowMs - lastSuccessfulMs >= refreshIntervalSec * 1000)
-        startRefresh()
+      // Revisit only the selected range. Other loaded ranges are refreshed by
+      // the normal timer, never eagerly just because the panel opened.
+      root.requestRange(range, false, true)
       Qt.callLater(function() { keyCatcher.forceActiveFocus() })
     }
   }
@@ -239,7 +337,7 @@ Panel {
     running: true
     repeat: true
     triggeredOnStart: true
-    onTriggered: root.startRefresh()
+    onTriggered: root.refreshStaleRanges()
   }
 
   Timer {
@@ -252,7 +350,9 @@ Panel {
   Process {
     id: usageProcess
     running: false
-    command: ["python3", root.helperPath(), "--range", root.range]
+    // Keep the command bound to the range captured when the process started;
+    // the visible tab can change while this request is still running.
+    command: ["python3", root.helperPath(), "--range", root.processRange]
 
     stdout: StdioCollector {
       waitForEnd: true
@@ -266,7 +366,10 @@ Panel {
 
     onExited: {
       var finishedRequest = root.activeRequest
-      Qt.callLater(function() { root.finishRefresh(finishedRequest) })
+      var finishedRange = root.activeRequestRange
+      Qt.callLater(function() {
+        root.finishRefresh(finishedRequest, finishedRange)
+      })
     }
   }
 
@@ -344,7 +447,9 @@ Panel {
                   tooltipText: Locale.t("action.refresh", null, root.uiLocale)
                   foreground: root.foreground
                   fontFamily: root.fontFamily
-                  enabled: !usageProcess.running
+                  // Refresh is scoped to the visible range. A request for a
+                  // different range may continue in the background.
+                  enabled: !root.loading
                   onClicked: root.refresh()
                 }
 
@@ -669,7 +774,7 @@ Panel {
           Text {
             visible: !root.currentReport && root.loading
             width: parent.width
-            text: Locale.t("loading.collecting", null, root.uiLocale)
+            text: Locale.t("loading.fetching", null, root.uiLocale)
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.body

@@ -52,12 +52,12 @@ Do not edit `/usr/share/omarchy/`.
 - Left click: open or close the detail panel
 - Right click: open `https://vibecafe.ai/usage`
 - Middle click or `r`: refresh the current range
-- `h`/`l` or the range chips: switch Today / 24H / 7D / 30D and refetch
+- `h`/`l` or the range chips: switch Today / 24H / 7D / 30D
 - `Cost` / `Token`: switch the panel metric without refetching
 - `↗`: open the dashboard and close the panel
 - `Esc`: close; `Tab`: move to the neighboring bar panel
 
-A failed refresh keeps the last successful report for that range visible and marks the panel stale. With no cached report, loading displays `…` and an error displays `!`. Missing configuration or a rejected key shows instructions to run `vibe-usage init`.
+Each range has its own in-memory report cache. The first visit fetches that range; switching to a fresh cached range is instant, while a stale cached report remains visible during its background refresh. Manual refresh affects only the selected range. A failed refresh keeps the last successful report for that range visible and marks the panel stale. With no cached report, loading displays `…` and an error displays `!`. Missing configuration or a rejected key shows instructions to run `vibe-usage init`.
 
 The panel follows the desktop locale automatically. Locales whose name starts with `zh` use Simplified Chinese; all other locales use English. There is no manual language switch.
 
@@ -86,7 +86,7 @@ Failure responses include a stable `code` such as `authentication`, `network_err
 
 ## Panel
 
-The panel follows the official Mac popover's order, not its pixels:
+The panel follows the official Mac popover's order, not its pixels. Reports are cached independently for Today, 24H, 7D, and 30D; the cache uses `refreshIntervalSec` as its freshness TTL and never approximates one server range from another:
 
 ```text
 Vibe Usage                         [refresh] [dashboard]
@@ -100,7 +100,7 @@ BY HOST
 updated …
 ```
 
-The four cards always show cost, computed tokens, cache tokens, and active time. The `Cost` / `Token` switch changes the hero, trend bars, breakdown values, percentages, progress bars, sorting, and independent top-eight + `Other` lists without another request. Token values use compact `K`, `M`, and `B` units with at most one decimal. The bar pill and its `showTokens` setting are unchanged. The helper is restarted cleanly for every refresh; a failed request never discards the previous successful report.
+The four cards always show cost, computed tokens, cache tokens, and active time. The `Cost` / `Token` switch changes the hero, trend bars, breakdown values, percentages, progress bars, sorting, and independent top-eight + `Other` lists without another request. Token values use compact `K`, `M`, and `B` units with at most one decimal. The bar pill and its `showTokens` setting are unchanged. Each range refresh uses one helper process; navigation never cancels or misattributes an in-flight request, and a failed request never discards the previous successful report.
 
 ## Publish and release
 
@@ -124,9 +124,11 @@ BarWidget.qml
 Panel.qml
 Model.js
 Locale.js
+RangeCache.js
 helper/usage.py
 test/model.test.mjs
 test/locale.test.mjs
+test/range-cache.test.mjs
 test/helper.test.py
 ```
 
@@ -136,6 +138,7 @@ test/helper.test.py
 python3 test/helper.test.py
 node test/model.test.mjs
 node test/locale.test.mjs
+node test/range-cache.test.mjs
 omarchy plugin validate .
 git diff --check
 ```

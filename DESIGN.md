@@ -17,7 +17,7 @@ Third-party Omarchy 4 `bar-widget` that shows [vibe-usage](https://github.com/vi
 
 Bar pill for today's cost + tokens, click panel (overview / by model / by tool), right-click opens the dashboard, middle-click refreshes, stale-on-failure.
 
-Phase 2 adds local-time range selection, cache and active-time cards, trend bars, and host grouping.
+Phase 2 adds local-time range selection, per-range report caching, cache and active-time cards, trend bars, and host grouping.
 
 ## Phase 2 (shipped)
 
@@ -38,13 +38,13 @@ updated …
 ### In scope
 
 - Send `tz=<local IANA id>` on every request (this is how the Mac app gets local calendar days).
-- Ranges: `today` (`from=` local midnight), `24h` (`days=1`), `7d`, `30d`. Changing range refetches once.
+- Ranges: `today` (`from=` local midnight), `24h` (`days=1`), `7d`, `30d`. Each range has an independent in-memory report cache; the first visit fetches, fresh reports switch instantly, and stale reports refresh in the background.
 - Four cards: cost, tokens, **cache tokens**, active time.
 - A `Cost` / `Token` segmented control below the range selector. Cost is the default and changing it is presentation-only; it never refetches.
 - The selected metric controls the hero, simple unstacked trend bars, breakdown values, percentages, progress bars, sorting, and top-eight + `Other` aggregation. Highlight the last bar (now / today).
 - `BY TOOL`, `BY MODEL`, then `BY HOST` rows (same shape).
 - Unconfigured / 401 empty state: tell the user to run `vibe-usage init`.
-- Restart the helper process cleanly on every refresh so middle-click cannot stick.
+- Run one short-lived helper process per queued range refresh; navigation never cancels an in-flight process.
 
 ### Out of Phase 2 (Phase 3)
 
@@ -62,9 +62,11 @@ BarWidget.qml
 Panel.qml
 Model.js
 Locale.js
+RangeCache.js
 helper/usage.py
 test/model.test.mjs
 test/locale.test.mjs
+test/range-cache.test.mjs
 test/helper.test.py
 ```
 
@@ -76,7 +78,8 @@ Install path for local landing: `~/.config/omarchy/plugins/mimiqdev.vibe-usage/`
 
 ```text
 BarWidget.qml  →  Loader Panel.qml
-                      →  Process ["python3", helper, "--range", range]
+                      →  RangeCache.js (independent state/queue per range)
+                      →  Process ["python3", helper, "--range", requestedRange]
                               →  read ~/.vibe-usage/config.json
                               →  GET {apiUrl}/api/usage?<query>&tz=<local>
 ```
@@ -89,7 +92,7 @@ One request per refresh. `tz` is the machine IANA timezone (Mac app does this). 
 | `24h` | `days=1` + `tz=` |
 | `7d` / `30d` | `days=7` or `days=30` + `tz=` |
 
-Changing the range starts a new helper process. Host / tool / model lists are built from that response only.
+Changing the range selects that range's cached state. A missing or stale range is queued without cancelling another request; the response is stored under its captured request range, and host / tool / model lists are built from the selected report only. Only loaded stale ranges are eligible for timer-driven background refresh, so opening the panel does not fetch all four ranges.
 
 ## Helper contract
 
@@ -190,7 +193,7 @@ Formats: cost `$` + 2 decimals (integer on vertical); tokens use compact decimal
 Same Omarchy kit (`KeyboardPanel` + `PanelHero`). Arrangement follows the Mac popover, simplified.
 
 - Hero: title `Vibe Usage`, detail = the selected metric, meta = range + sessions + active
-- Range buttons: `Today` / `24H` / `7D` / `30D` (refetch)
+- Range buttons: `Today` / `24H` / `7D` / `30D` (independent cached reports)
 - Metric buttons: `Cost` / `Token` (`费用` / `Token` in Chinese), defaulting to Cost without refetching
 - Four cards: cost, tokens, cache, active
 - `TREND`: one bar per series point, height by the selected metric, last bar emphasized
@@ -204,12 +207,12 @@ Same Omarchy kit (`KeyboardPanel` + `PanelHero`). Arrangement follows the Mac po
 | Right click pill | `omarchy launch browser https://vibecafe.ai/usage` |
 | Middle click pill | Refresh current range |
 | `r` / ↻ | Refresh |
-| `h`/`l` or range buttons | Change range and refetch |
+| `h`/`l` or range buttons | Change range; fetch only when its cache is missing or stale |
 | ↗ | Open dashboard and close panel |
 | Esc | Close |
 | Tab | Neighbor bar panel |
 
-Refresh: timer `refreshIntervalSec` (default 120, clamp 30–600). On open, refetch if last success is older than the interval. On failure keep the previous report. Always stop then start the helper process.
+Refresh: timer `refreshIntervalSec` (default 120, clamp 30–600) is the per-range freshness TTL. On open, fetch only the selected range when missing or stale. Timer refreshes loaded stale ranges in the background without fetching untouched ranges. Manual refresh forces only the selected range. A stale report remains visible during refresh and a failure preserves it. One helper process at a time uses a captured request range; navigation never cancels or misattributes an in-flight response.
 
 ## Manifest
 
@@ -286,5 +289,6 @@ Never edit `/usr/share/omarchy/`.
 
 - `test/helper.test.py`: range queries with timezone, totals/cache/series, top-8+Other, 401, missing key, source rename. Live API optional, never commit the key.
 - `test/model.test.mjs`: parse + format + barText + sanitization.
+- `test/range-cache.test.mjs`: first load, fresh switching, stale refresh, independent response/failure state, and queue deduplication.
 - `omarchy plugin validate <plugin-dir>`
 - `git diff --check <base_commit>..HEAD`

@@ -52,12 +52,12 @@ omarchy plugin remove akitaonrails.ai-usagebar --yes
 - 左键：打开或关闭详情面板
 - 右键：打开 `https://vibecafe.ai/usage`
 - 中键或按 `r`：刷新当前范围
-- 按 `h`/`l` 或点击范围按钮：切换今天 / 24 小时 / 7 天 / 30 天并重新获取
+- 按 `h`/`l` 或点击范围按钮：切换今天 / 24 小时 / 7 天 / 30 天
 - `费用` / `Token`：切换面板指标，不重新获取数据
 - `↗`：打开仪表盘并关闭面板
 - `Esc`：关闭；`Tab`：移动到相邻的条形面板
 
-刷新失败时，会保留该范围上一次成功的报告并标记为过期。没有缓存报告时，加载状态显示 `…`，错误状态显示 `!`。缺少配置或 API Key 被拒绝时，会提示运行 `vibe-usage init`。
+每个范围都有独立的内存报告缓存。第一次访问某个范围时才会获取数据；切换到仍在有效期内的缓存范围会立即显示，过期报告则会在后台刷新期间继续显示。手动刷新只影响当前选中的范围。刷新失败时，会保留该范围上一次成功的报告并标记为过期。没有缓存报告时，加载状态显示 `…`，错误状态显示 `!`。缺少配置或 API Key 被拒绝时，会提示运行 `vibe-usage init`。
 
 面板会自动跟随桌面语言。名称以 `zh` 开头的语言使用简体中文，其他语言使用英文。不提供手动语言切换。
 
@@ -86,7 +86,7 @@ inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens
 
 ## 面板
 
-面板遵循官方 Mac 弹窗的顺序，而不是照搬像素布局：
+面板遵循官方 Mac 弹窗的顺序，而不是照搬像素布局。今天、24 小时、7 天和 30 天分别缓存报告，使用 `refreshIntervalSec` 作为有效期；不会用一个服务器范围近似另一个范围：
 
 ```text
 Vibe Usage                         [刷新] [仪表盘]
@@ -100,7 +100,7 @@ Vibe Usage                         [刷新] [仪表盘]
 更新时间 …
 ```
 
-四张卡片始终显示费用、计算后的 Token 数、缓存 Token 数和活跃时间。`费用` / `Token` 切换会立即改变主指标、趋势条、分组行数值、百分比、进度条、排序以及独立的前八项 + `Other` 列表，不会重新请求数据。Token 数使用紧凑的 `K`、`M`、`B` 单位，最多保留一位小数。条形区和 `showTokens` 设置保持不变。每次刷新都会干净地重启辅助进程；请求失败不会丢弃上一次成功的报告。
+四张卡片始终显示费用、计算后的 Token 数、缓存 Token 数和活跃时间。`费用` / `Token` 切换会立即改变主指标、趋势条、分组行数值、百分比、进度条、排序以及独立的前八项 + `Other` 列表，不会重新请求数据。Token 数使用紧凑的 `K`、`M`、`B` 单位，最多保留一位小数。条形区和 `showTokens` 设置保持不变。每个范围的刷新使用一个辅助进程；切换标签不会取消或错误归属进行中的请求，请求失败也不会丢弃上一次成功的报告。
 
 ## 发布和版本流程
 
@@ -124,9 +124,11 @@ BarWidget.qml
 Panel.qml
 Model.js
 Locale.js
+RangeCache.js
 helper/usage.py
 test/model.test.mjs
 test/locale.test.mjs
+test/range-cache.test.mjs
 test/helper.test.py
 ```
 
@@ -136,6 +138,7 @@ test/helper.test.py
 python3 test/helper.test.py
 node test/model.test.mjs
 node test/locale.test.mjs
+node test/range-cache.test.mjs
 omarchy plugin validate .
 git diff --check
 ```
