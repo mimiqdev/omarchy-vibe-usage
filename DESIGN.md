@@ -13,15 +13,38 @@ Third-party Omarchy 4 `bar-widget` that shows [vibe-usage](https://github.com/vi
 | Sync | Daemon already running. Plugin is display-only |
 | Secrets | Never load the API key into QML. Helper reads `~/.vibe-usage/config.json` |
 
-## Phase 1 (this task)
+## Phase 1 (shipped)
 
 Bar pill for today's cost + tokens, click panel (overview / by model / by tool), right-click opens the dashboard, middle-click refreshes, stale-on-failure.
 
-## Phase 2 (out of scope)
+## Phase 2 (next)
 
-Trend chart, project/host filters, 30d/90d, empty-state onboarding, `summary --json` upstream, official vibe-cafe repo.
+Follow the official Mac popover **order**, not its pixels. One API request per selected range, always with `tz=`.
 
-Do **not** add Claude/Codex quota cards. That is `omarchy.agents`.
+```
+Hero: Vibe Usage          [↻] [↗]
+[Today] [24H] [7D] [30D]
+┌ cost ┐ ┌ tokens ┐ ┌ cache ┐ ┌ active ┐
+TREND   (simple cost bars: hours for Today/24H, days for 7D/30D)
+BY HOST
+BY TOOL
+BY MODEL
+updated …
+```
+
+### In scope
+
+- Send `tz=<local IANA id>` on every request (this is how the Mac app gets local calendar days).
+- Ranges: `today` (`from=` local midnight), `24h` (`days=1`), `7d`, `30d`. Changing range refetches once.
+- Four cards: cost, tokens, **cache tokens**, active time.
+- Simple unstacked cost bars. Highlight the last bar (now / today).
+- `BY HOST` rows, same shape as tool/model.
+- Unconfigured / 401 empty state: tell the user to run `vibe-usage init`.
+- Restart the helper process cleanly on every refresh so middle-click cannot stick.
+
+### Out of Phase 2 (Phase 3)
+
+Donut charts, host/tool/model dropdown filters, stacked input/output/cache bars, Token/费用/活跃 chart toggle, 90D, custom date range, project filter, in-panel login, CLI `summary --json`, quota cards (`omarchy.agents`).
 
 ## Layout
 
@@ -45,17 +68,24 @@ Install path for local landing: `~/.config/omarchy/plugins/cafe.vibe.usage/`
 
 ```
 BarWidget.qml  →  Loader Panel.qml
-                      →  Process ["python3", "<pluginDir>/helper/usage.py"]
+                      →  Process ["python3", helper, "--range", range]
                               →  read ~/.vibe-usage/config.json
-                              →  GET {apiUrl}/api/usage?days=1   # hourly, for local today
-                              →  GET {apiUrl}/api/usage?days=7   # daily rollup, for 7d
+                              →  GET {apiUrl}/api/usage?<query>&tz=<local>
 ```
 
-`days=7` buckets are UTC calendar days stamped at `00:00Z` and cannot be split into a local day. Today is sliced from the hourly `days=1` payload using the machine timezone. The panel period toggle does not refetch.
+One request per refresh. `tz` is the machine IANA timezone (Mac app does this). Without it, `days=N` is UTC days and "today" is wrong.
+
+| Range | Query |
+| --- | --- |
+| `today` | `from=<local midnight as UTC ISO>` + `tz=` |
+| `24h` | `days=1` + `tz=` |
+| `7d` / `30d` | `days=7` or `days=30` + `tz=` |
+
+Changing the range starts a new helper process. Host / tool / model lists are built from that response only.
 
 ## Helper contract
 
-`python3 helper/usage.py`
+`python3 helper/usage.py --range today|24h|7d|30d` (default `today`)
 
 - Exit 0 on success, 1 on config/auth/network failure
 - stdout is JSON only
@@ -66,32 +96,23 @@ Success:
 ```json
 {
   "ok": true,
-  "fetchedAt": "2026-08-19T10:40:00+08:00",
+  "range": "today",
+  "fetchedAt": "2026-08-20T10:40:00+08:00",
   "dashboard": "https://vibecafe.ai/usage",
   "hostname": "WorkOmarchy",
-  "windows": {
-    "today": { "totals": {}, "byModel": [], "bySource": [] },
-    "7d":    { "totals": {}, "byModel": [], "bySource": [] }
-  }
-}
-```
-
-Each window:
-
-```json
-{
   "totals": {
-    "cost": 117.95,
-    "tokens": 43800000,
-    "sessions": 43,
-    "activeSeconds": 76320
+    "cost": 206.2,
+    "tokens": 22160311,
+    "cachedTokens": 18000000,
+    "sessions": 25,
+    "activeSeconds": 170517
   },
-  "byModel": [
-    { "name": "grok-4.6", "cost": 44.61, "tokens": 7700000, "pct": 38 }
+  "series": [
+    { "key": "2026-08-20T01:00:00+08:00", "label": "01:00", "cost": 12.4, "tokens": 800000 }
   ],
-  "bySource": [
-    { "name": "cursor", "cost": 80.12, "tokens": 20000000, "sessions": 20, "pct": 68 }
-  ]
+  "byHost": [{ "name": "Tonys-MacBook-Air", "cost": 180.1, "tokens": 20000000, "sessions": 20, "pct": 87 }],
+  "bySource": [{ "name": "codex", "cost": 203.22, "tokens": 18000000, "sessions": 21, "pct": 98 }],
+  "byModel": [{ "name": "gpt-5.6-sol", "cost": 126.97, "tokens": 4300000, "pct": 62 }]
 }
 ```
 
@@ -105,11 +126,13 @@ Rules:
 
 | Item | Definition |
 | --- | --- |
-| `today` | Local calendar day from hourly `days=1` buckets (`bucketStart` in the machine timezone). Do not slice `days=7` daily UTC rollups. |
-| `7d` | All buckets from `days=7` (UTC daily rollup, same total as CLI `summary --days 7`) |
+| `today` | `from=` local midnight + `tz=`. Hourly buckets. |
+| `24h` | `days=1` + `tz=`. Rolling 24 hourly buckets. |
+| `7d` / `30d` | `days=N` + `tz=`. Local calendar days (bucketStart is local midnight as UTC). |
 | `tokens` | Sum of `totalTokens` (do not add cache again) |
+| `cachedTokens` | Sum of `cachedInputTokens` |
 | `cost` | Sum of `estimatedCost` |
-| `sessions` | Count in window; today uses `lastMessageAt` on the local calendar day |
+| `sessions` | Session count in the fetched payload |
 | `pct` | Share of that window's `cost`, rounded to int |
 | Sort | Cost descending |
 | Truncate | Top 8 per list; remainder becomes `Other` |
@@ -144,26 +167,28 @@ Formats: cost `$` + 2 decimals (integer on vertical); tokens `43.8M` / `874K` / 
 
 ## Panel
 
-Match weather / `ai-usagebar`: `KeyboardPanel` + `PanelHero`.
+Same Omarchy kit (`KeyboardPanel` + `PanelHero`). Arrangement follows the Mac popover, simplified.
 
-- Hero: title `Vibe Usage`, detail = formatted cost, meta = period + sessions + active hours
-- Chips: `Today` / `7 days`
-- Four totals: cost, tokens, sessions, active
-- `BY MODEL` and `BY TOOL` rows with cost + bar + pct
-- Footer: `updated …` and `refreshing…` when in flight
+- Hero: title `Vibe Usage`, detail = cost, meta = range + sessions + active
+- Range buttons: `Today` / `24H` / `7D` / `30D` (refetch)
+- Four cards: cost, tokens, cache, active
+- `TREND`: one bar per series point, height by cost, last bar emphasized
+- `BY HOST`, `BY TOOL`, `BY MODEL` rows (cost + bar + pct)
+- Footer: `updated …` / `refreshing…`
+- Missing key / 401: keep the hero, replace the body with init instructions
 
 | Input | Action |
 | --- | --- |
 | Left click pill | Toggle panel |
 | Right click pill | `omarchy launch browser https://vibecafe.ai/usage` |
-| Middle click pill | Refresh |
+| Middle click pill | Refresh current range |
 | `r` / ↻ | Refresh |
-| `h`/`l` or chips | Switch Today / 7 days (no network) |
+| `h`/`l` or range buttons | Change range and refetch |
 | ↗ | Open dashboard and close panel |
 | Esc | Close |
 | Tab | Neighbor bar panel |
 
-Refresh: timer `refreshIntervalSec` (default 120, clamp 30–600). On open, refetch only if last success is older than the interval. On failure keep previous report.
+Refresh: timer `refreshIntervalSec` (default 120, clamp 30–600). On open, refetch if last success is older than the interval. On failure keep the previous report. Always stop then start the helper process.
 
 ## Manifest
 
