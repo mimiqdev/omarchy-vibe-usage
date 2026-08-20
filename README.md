@@ -17,16 +17,16 @@ The helper reads the API key itself and never passes it through QML, argv, or en
 
 ## Install and update
 
-The plugin id is `mimiqdev.vibe-usage`. Install it from a public git repository with:
+The plugin id is `mimiqdev.vibe-usage`. Install it from GitHub with:
 
 ```sh
-omarchy plugin add <git-url> --enable
+omarchy plugin add https://github.com/mimiqdev/omarchy-vibe-usage.git --enable
 ```
 
 For example:
 
 ```sh
-omarchy plugin add https://github.com/<owner>/<repository>.git --enable
+omarchy plugin add https://github.com/mimiqdev/omarchy-vibe-usage.git --enable
 ```
 
 The manifest must be at the repository root. To update a git-installed copy:
@@ -103,7 +103,7 @@ The four cards show cost, computed tokens, cache tokens, and active time. Breakd
 1. Keep `manifest.json` at the repository root and use the third-party id `mimiqdev.vibe-usage`.
 2. Run the local tests and `omarchy plugin validate .`.
 3. Commit and push the repository to a public git host. Tags or GitHub releases are optional.
-4. Users install the public URL with `omarchy plugin add <git-url> --enable` and later update with `omarchy plugin update mimiqdev.vibe-usage`.
+4. Users install with `omarchy plugin add https://github.com/mimiqdev/omarchy-vibe-usage.git --enable` and later update with `omarchy plugin update mimiqdev.vibe-usage`.
 5. If desired, submit the public repository link to [omarchyplugins.com](https://omarchyplugins.com/) according to that site's current instructions. This is an optional community listing, not an official Omarchy store.
 
 Do not publish API keys or `~/.vibe-usage/config.json`. A local copy is useful for development but does not provide git-based updates.

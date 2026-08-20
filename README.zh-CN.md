@@ -17,16 +17,16 @@
 
 ## 安装和更新
 
-插件 ID 是 `mimiqdev.vibe-usage`。从公开 git 仓库安装：
+插件 ID 是 `mimiqdev.vibe-usage`。从 GitHub 安装：
 
 ```sh
-omarchy plugin add <git-url> --enable
+omarchy plugin add https://github.com/mimiqdev/omarchy-vibe-usage.git --enable
 ```
 
 例如：
 
 ```sh
-omarchy plugin add https://github.com/<owner>/<repository>.git --enable
+omarchy plugin add https://github.com/mimiqdev/omarchy-vibe-usage.git --enable
 ```
 
 `manifest.json` 必须位于仓库根目录。通过 git 安装后，可以这样更新：
@@ -103,7 +103,7 @@ Vibe Usage                         [刷新] [仪表盘]
 1. 保持 `manifest.json` 位于仓库根目录，并使用第三方插件 ID `mimiqdev.vibe-usage`。
 2. 运行本地测试和 `omarchy plugin validate .`。
 3. 将仓库提交并推送到公开 git 托管服务；tag 或 GitHub Release 可选。
-4. 用户使用 `omarchy plugin add <git-url> --enable` 安装，之后使用 `omarchy plugin update mimiqdev.vibe-usage` 更新。
+4. 用户使用 `omarchy plugin add https://github.com/mimiqdev/omarchy-vibe-usage.git --enable` 安装，之后使用 `omarchy plugin update mimiqdev.vibe-usage` 更新。
 5. 如有需要，可按照 [omarchyplugins.com](https://omarchyplugins.com/) 当前的说明提交公开仓库链接。这是可选的社区列表，不是 Omarchy 官方商店。
 
 不要发布 API Key 或 `~/.vibe-usage/config.json`。本地复制适合开发，但不能提供基于 git 的更新。
