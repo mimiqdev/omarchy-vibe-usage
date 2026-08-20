@@ -1,6 +1,6 @@
 # Vibe Usage Omarchy 插件
 
-这是一个面向 Omarchy 4 的第三方 `bar-widget`，用于显示 [Vibe Usage 仪表盘](https://vibecafe.ai/usage) 平台的花费和令牌用量，并提供按本地时间查看今天、24 小时、7 天或 30 天数据的面板。账户配置和数据同步由开源的 [vibe-usage 客户端](https://github.com/vibe-cafe/vibe-usage) 提供。
+这是一个面向 Omarchy 4 的第三方 `bar-widget`，用于显示 [Vibe Usage 仪表盘](https://vibecafe.ai/usage) 平台的花费和 Token用量，并提供按本地时间查看今天、24 小时、7 天或 30 天数据的面板。账户配置和数据同步由开源的 [vibe-usage 客户端](https://github.com/vibe-cafe/vibe-usage) 提供。
 
 [English documentation](README.md)
 
@@ -73,7 +73,7 @@ python3 helper/usage.py --range today|24h|7d|30d
 - `7d`：`days=7&tz=<IANA 时区>`
 - `30d`：`days=30&tz=<IANA 时区>`
 
-成功的 JSON 包含 `totals`（费用、计算后的令牌数、仅缓存令牌数、会话数、活跃时间）、按时间排序的 `series`，以及最多八项的 `byHost`、`bySource` 和 `byModel` 列表。令牌总数与官网/Mac App 保持一致，计算公式是：
+成功的 JSON 包含 `totals`（费用、计算后的 Token 数、仅缓存 Token 数、会话数、活跃时间）、按时间排序的 `series`，以及最多八项的 `byHost`、`bySource` 和 `byModel` 列表。Token 总数与官网/Mac App 保持一致，计算公式是：
 
 ```text
 inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens
@@ -90,7 +90,7 @@ inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens
 ```text
 Vibe Usage                         [刷新] [仪表盘]
 [今天] [24小时] [7天] [30天]
-┌ 费用 ┐ ┌ 令牌 ┐ ┌ 缓存 ┐ ┌ 活跃 ┐
+┌ 费用 ┐ ┌ Token ┐ ┌ 缓存 ┐ ┌ 活跃 ┐
 趋势    （今天/24小时按小时，7天/30天按天）
 按工具
 按模型
@@ -98,7 +98,7 @@ Vibe Usage                         [刷新] [仪表盘]
 更新时间 …
 ```
 
-四张卡片显示费用、计算后的令牌数、缓存令牌数和活跃时间。分组行显示费用、百分比和条形图。每次刷新都会干净地重启辅助进程；请求失败不会丢弃上一次成功的报告。
+四张卡片显示费用、计算后的 Token 数、缓存 Token 数和活跃时间。分组行显示费用、百分比和条形图。每次刷新都会干净地重启辅助进程；请求失败不会丢弃上一次成功的报告。
 
 ## 发布和版本流程
 
