@@ -4,7 +4,7 @@ import importlib.util
 import json
 import sys
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 from pathlib import Path
 from urllib.error import HTTPError
@@ -116,6 +116,54 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(seen["url"], "https://example.test/api/usage?days=7")
         self.assertEqual(seen["auth"], "Bearer vbu_test")
         self.assertEqual(seen["timeout"], 15)
+
+        usage.fetch_usage(
+            {"apiUrl": "https://example.test/", "apiKey": "vbu_test"},
+            opener=opener,
+            days=1,
+        )
+        self.assertEqual(seen["url"], "https://example.test/api/usage?days=1")
+
+    def test_today_uses_local_date_of_hourly_utc_buckets(self):
+        local_tz = self.now.tzinfo
+        midnight = datetime.combine(self.today, datetime.min.time(), tzinfo=local_tz)
+        hour_today = (midnight + timedelta(hours=1)).astimezone(timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%S.000Z"
+        )
+        hour_yesterday = (midnight - timedelta(hours=1)).astimezone(timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%S.000Z"
+        )
+        utc_day_stamp = f"{self.today.isoformat()}T00:00:00.000Z"
+        today_data = {
+            "buckets": [
+                {"source": "codex", "model": "gpt", "bucketStart": hour_today,
+                 "totalTokens": 100, "estimatedCost": 10},
+                {"source": "codex", "model": "gpt", "bucketStart": hour_yesterday,
+                 "totalTokens": 200, "estimatedCost": 20},
+            ],
+            "sessions": [
+                {"source": "codex", "lastMessageAt": hour_today, "activeSeconds": 30},
+                {"source": "codex", "lastMessageAt": hour_yesterday, "activeSeconds": 90},
+            ],
+        }
+        week_data = {
+            "buckets": [
+                {"source": "codex", "model": "gpt", "bucketStart": utc_day_stamp,
+                 "totalTokens": 50, "estimatedCost": 1},
+            ],
+            "sessions": [],
+        }
+        report = usage.build_report(
+            week_data,
+            {"apiUrl": "https://vibecafe.ai", "hostname": "WorkOmarchy"},
+            now=self.now,
+            today_data=today_data,
+        )
+        today = report["windows"]["today"]
+        self.assertEqual(today["totals"]["cost"], 10)
+        self.assertEqual(today["totals"]["tokens"], 100)
+        self.assertEqual(today["totals"]["sessions"], 1)
+        self.assertEqual(report["windows"]["7d"]["totals"]["cost"], 1)
 
 
 if __name__ == "__main__":

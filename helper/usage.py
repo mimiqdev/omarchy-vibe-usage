@@ -76,25 +76,29 @@ def dashboard_url(api_url: str) -> str:
     return api_url.rstrip("/") + "/usage"
 
 
-def _request_url(api_url: str) -> str:
-    return api_url.rstrip("/") + "/api/usage?days=7"
+def _request_url(api_url: str, days: int) -> str:
+    return api_url.rstrip("/") + f"/api/usage?days={days}"
 
 
 def fetch_usage(
     config: Mapping[str, Any],
     opener: Callable[..., Any] | None = None,
+    *,
+    days: int = 7,
 ) -> Mapping[str, Any]:
     """Fetch the API report using the same endpoint as ``summary``.
 
-    ``opener`` is injectable for offline tests; the production path uses
-    urllib's standard HTTPS/HTTP implementation and a 15-second timeout.
+    ``days=7`` is a UTC daily rollup. ``days=1`` is hourly and is what
+    local-calendar "today" needs. ``opener`` is injectable for offline
+    tests; the production path uses urllib with a 15-second timeout.
     """
     api_key = _text(config.get("apiKey"))
     if not api_key:
         raise UsageError(MISSING_KEY_ERROR)
     api_url = _api_url(config)
+    window_days = days if days in {1, 7} else 7
     request = Request(
-        _request_url(api_url),
+        _request_url(api_url, window_days),
         headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
         method="GET",
     )
@@ -354,21 +358,33 @@ def build_window(
     }
 
 
+def _payload_lists(data: Mapping[str, Any] | None) -> tuple[list[Any], list[Any]]:
+    if not isinstance(data, dict):
+        raise UsageError("获取用量数据失败: API 返回格式无效")
+    buckets = data.get("buckets")
+    sessions = data.get("sessions")
+    return (
+        buckets if isinstance(buckets, list) else [],
+        sessions if isinstance(sessions, list) else [],
+    )
+
+
 def build_report(
     data: Mapping[str, Any],
     config: Mapping[str, Any] | None = None,
     *,
     now: datetime | None = None,
+    today_data: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Turn the API response into the stable JSON contract consumed by QML."""
-    if not isinstance(data, dict):
-        raise UsageError("获取用量数据失败: API 返回格式无效")
-    buckets = data.get("buckets")
-    sessions = data.get("sessions")
-    if not isinstance(buckets, list):
-        buckets = []
-    if not isinstance(sessions, list):
-        sessions = []
+    """Turn API responses into the stable JSON contract consumed by QML.
+
+    ``today_data`` should be the hourly ``days=1`` payload so local midnight
+    to now can be sliced. When omitted (tests), ``data`` is used for both
+    windows.
+    """
+    week_buckets, week_sessions = _payload_lists(data)
+    today_source = today_data if today_data is not None else data
+    today_buckets, today_sessions = _payload_lists(today_source)
 
     local_today = _today(now)
     config = config or {}
@@ -380,8 +396,10 @@ def build_report(
         "dashboard": dashboard_url(api_url),
         "hostname": hostname,
         "windows": {
-            "today": build_window(buckets, sessions, today=local_today, today_only=True),
-            "7d": build_window(buckets, sessions),
+            "today": build_window(
+                today_buckets, today_sessions, today=local_today, today_only=True
+            ),
+            "7d": build_window(week_buckets, week_sessions),
         },
     }
 
@@ -398,8 +416,9 @@ def main() -> int:
         return 1
 
     try:
-        data = fetch_usage(config)
-        emit(build_report(data, config))
+        week = fetch_usage(config, days=7)
+        today = fetch_usage(config, days=1)
+        emit(build_report(week, config, today_data=today))
         return 0
     except Exception as error:
         if isinstance(error, AuthenticationError):

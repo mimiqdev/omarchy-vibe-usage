@@ -47,10 +47,11 @@ Install path for local landing: `~/.config/omarchy/plugins/cafe.vibe.usage/`
 BarWidget.qml  →  Loader Panel.qml
                       →  Process ["python3", "<pluginDir>/helper/usage.py"]
                               →  read ~/.vibe-usage/config.json
-                              →  GET {apiUrl}/api/usage?days=7
+                              →  GET {apiUrl}/api/usage?days=1   # hourly, for local today
+                              →  GET {apiUrl}/api/usage?days=7   # daily rollup, for 7d
 ```
 
-One request for 7 days. Helper splits `today` and `7d` locally. Period toggle does not refetch.
+`days=7` buckets are UTC calendar days stamped at `00:00Z` and cannot be split into a local day. Today is sliced from the hourly `days=1` payload using the machine timezone. The panel period toggle does not refetch.
 
 ## Helper contract
 
@@ -104,8 +105,8 @@ Rules:
 
 | Item | Definition |
 | --- | --- |
-| `today` | Local calendar day, by `bucketStart` |
-| `7d` | All buckets from `days=7` (rolling 7×24h, same as CLI `summary`) |
+| `today` | Local calendar day from hourly `days=1` buckets (`bucketStart` in the machine timezone). Do not slice `days=7` daily UTC rollups. |
+| `7d` | All buckets from `days=7` (UTC daily rollup, same total as CLI `summary --days 7`) |
 | `tokens` | Sum of `totalTokens` (do not add cache again) |
 | `cost` | Sum of `estimatedCost` |
 | `sessions` | Count in window; today uses `lastMessageAt` on the local calendar day |

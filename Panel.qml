@@ -130,6 +130,17 @@ Panel {
     startRefresh()
   }
 
+  // Qt.resolvedUrl returns a file:// URL. Process argv needs a local path
+  // or python3 tries to open the literal URL and writes nothing to stdout.
+  function helperPath() {
+    var resolved = String(Qt.resolvedUrl("helper/usage.py"))
+    if (resolved.indexOf("file://") === 0) {
+      var path = resolved.slice(7)
+      try { return decodeURIComponent(path) } catch (e) { return path }
+    }
+    return resolved
+  }
+
   function openDashboard() {
     if (bar) bar.run("omarchy launch browser " + dashboardUrl())
     root.close()
@@ -164,7 +175,7 @@ Panel {
   Process {
     id: usageProcess
     running: false
-    command: ["python3", Qt.resolvedUrl("helper/usage.py")]
+    command: ["python3", root.helperPath()]
 
     stdout: StdioCollector {
       waitForEnd: true
@@ -188,7 +199,6 @@ Panel {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
-    centerOnBar: true
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(470))
     contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(700))

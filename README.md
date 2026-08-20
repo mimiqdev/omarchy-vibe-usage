@@ -2,6 +2,8 @@
 
 A third-party Omarchy 4 `bar-widget` for [vibe-usage](https://github.com/vibe-cafe/vibe-usage). It shows today's spend and tokens in the bar, with a panel for today or the last seven days split by model and tool.
 
+Today is the machine's local calendar day, built from the hourly `days=1` API. The seven-day view uses the daily `days=7` rollup.
+
 This plugin is display-only. The `vibe-usage` daemon continues to sync local records; the plugin makes one read-only API request when it refreshes.
 
 ## Requirements
