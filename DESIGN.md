@@ -28,9 +28,9 @@ Hero: Vibe Usage          [↻] [↗]
 [Today] [24H] [7D] [30D]
 ┌ cost ┐ ┌ tokens ┐ ┌ cache ┐ ┌ active ┐
 TREND   (simple cost bars: hours for Today/24H, days for 7D/30D)
-BY HOST
 BY TOOL
 BY MODEL
+BY HOST
 updated …
 ```
 
@@ -40,7 +40,7 @@ updated …
 - Ranges: `today` (`from=` local midnight), `24h` (`days=1`), `7d`, `30d`. Changing range refetches once.
 - Four cards: cost, tokens, **cache tokens**, active time.
 - Simple unstacked cost bars. Highlight the last bar (now / today).
-- `BY HOST` rows, same shape as tool/model.
+- `BY TOOL`, `BY MODEL`, then `BY HOST` rows (same shape).
 - Unconfigured / 401 empty state: tell the user to run `vibe-usage init`.
 - Restart the helper process cleanly on every refresh so middle-click cannot stick.
 
@@ -175,7 +175,7 @@ Same Omarchy kit (`KeyboardPanel` + `PanelHero`). Arrangement follows the Mac po
 - Range buttons: `Today` / `24H` / `7D` / `30D` (refetch)
 - Four cards: cost, tokens, cache, active
 - `TREND`: one bar per series point, height by cost, last bar emphasized
-- `BY HOST`, `BY TOOL`, `BY MODEL` rows (cost + bar + pct)
+- `BY TOOL`, `BY MODEL`, `BY HOST` rows (cost + bar + pct)
 - Footer: `updated …` / `refreshing…`
 - Missing key / 401: keep the hero, replace the body with init instructions
 

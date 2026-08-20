@@ -479,35 +479,6 @@ Panel {
           }
 
           Column {
-            id: hostSection
-            visible: root.showReportBody && root.currentReport.byHost.length > 0
-            width: parent.width
-            spacing: Style.space(8)
-
-            PanelSeparator { width: parent.width; foreground: root.foreground }
-            PanelSectionHeader {
-              text: "BY HOST"
-              foreground: root.foreground
-              fontFamily: root.fontFamily
-            }
-
-            Repeater {
-              model: root.currentReport ? root.currentReport.byHost : []
-              delegate: Item {
-                required property var modelData
-                width: hostSection.width
-                implicitHeight: hostRow.implicitHeight
-
-                SpendRow {
-                  id: hostRow
-                  width: parent.width
-                  row: modelData
-                }
-              }
-            }
-          }
-
-          Column {
             id: sourceSection
             visible: root.showReportBody && root.currentReport.bySource.length > 0
             width: parent.width
@@ -558,6 +529,35 @@ Panel {
 
                 SpendRow {
                   id: modelRow
+                  width: parent.width
+                  row: modelData
+                }
+              }
+            }
+          }
+
+          Column {
+            id: hostSection
+            visible: root.showReportBody && root.currentReport.byHost.length > 0
+            width: parent.width
+            spacing: Style.space(8)
+
+            PanelSeparator { width: parent.width; foreground: root.foreground }
+            PanelSectionHeader {
+              text: "BY HOST"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            Repeater {
+              model: root.currentReport ? root.currentReport.byHost : []
+              delegate: Item {
+                required property var modelData
+                width: hostSection.width
+                implicitHeight: hostRow.implicitHeight
+
+                SpendRow {
+                  id: hostRow
                   width: parent.width
                   row: modelData
                 }
