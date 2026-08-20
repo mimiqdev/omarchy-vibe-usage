@@ -87,7 +87,7 @@ assert.equal(
 );
 assert.equal(
   Model.tooltipText(report, "today", false, "", "zh-CN"),
-  "今天 · $117.95 · 43.8M 令牌",
+  "今天 · $117.95 · 43.8M Token",
 );
 assert.equal(
   Model.updatedText(

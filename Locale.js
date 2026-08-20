@@ -67,7 +67,7 @@ var zhCN = {
   "period.meta.7d": "7天",
   "period.meta.30d": "30天",
   "card.cost": "费用",
-  "card.tokens": "令牌",
+  "card.tokens": "Token",
   "card.cache": "缓存",
   "card.active": "活跃",
   "section.trend": "趋势",
@@ -104,7 +104,7 @@ var zhCN = {
   "status.updatedDays": "{days} 天前更新",
   "tooltip.unavailable": "Vibe Usage 不可用",
   "tooltip.loading": "Vibe Usage · 加载中",
-  "tooltip.tokens": "令牌",
+  "tooltip.tokens": "Token",
   "meta.summary": "{sessions} 个会话 · 活跃 {active}",
 };
 
