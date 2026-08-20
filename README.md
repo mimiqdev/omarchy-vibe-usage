@@ -1,29 +1,23 @@
 # Vibe Usage Omarchy plugin
 
-A third-party Omarchy 4 `bar-widget` for [vibe-usage](https://github.com/vibe-cafe/vibe-usage). It shows spend and token usage in the bar and provides a local-time panel for Today, 24H, 7D, or 30D.
+A third-party Omarchy 4 `bar-widget` for the [Vibe Usage dashboard](https://vibecafe.ai/usage). It shows the platform's spend and token usage in the bar and provides a local-time panel for Today, 24H, 7D, or 30D. Account setup and data synchronization are provided by the open-source [vibe-usage client](https://github.com/vibe-cafe/vibe-usage).
 
 [中文文档](README.zh-CN.md)
 
-The plugin is display-only: the `vibe-usage` daemon keeps syncing local records, while this plugin makes one read-only API request whenever it refreshes. It is not an official vibe-cafe or Omarchy plugin.
+The plugin is display-only: the `vibe-usage` daemon keeps syncing local records, while this plugin makes one read-only API request whenever it refreshes. It is an independent community integration and is not affiliated with, sponsored by, or endorsed by VibeCafé or Omarchy.
 
-## Requirements
+## Requirements and dependencies
 
 - Omarchy 4 with the Quickshell plugin UI
-- Python 3
-- `~/.vibe-usage/config.json` created by `vibe-usage init`
-- A running `vibe-usage` daemon is recommended
+- Python 3 (standard library only; no pip packages)
+- A Vibe Usage account and `~/.vibe-usage/config.json` created by `vibe-usage init`
+- A running `vibe-usage` daemon is recommended so local usage continues to sync
 
 The helper reads the API key itself and never passes it through QML, argv, or environment variables. Every request includes the machine's local IANA timezone so calendar ranges match the desktop.
 
 ## Install and update
 
 The plugin id is `mimiqdev.vibe-usage`. Install it from GitHub with:
-
-```sh
-omarchy plugin add https://github.com/mimiqdev/omarchy-vibe-usage.git --enable
-```
-
-For example:
 
 ```sh
 omarchy plugin add https://github.com/mimiqdev/omarchy-vibe-usage.git --enable
@@ -36,6 +30,14 @@ omarchy plugin update mimiqdev.vibe-usage
 ```
 
 For local development, `omarchy plugin validate` can validate this directory. A copied or `rsync`-installed tree is not a git checkout, so `omarchy plugin update mimiqdev.vibe-usage` will not work until the plugin is installed from git.
+
+To uninstall this plugin:
+
+```sh
+omarchy plugin remove mimiqdev.vibe-usage --yes
+```
+
+Uninstalling the widget does not remove `~/.vibe-usage/config.json` or stop the separately managed `vibe-usage` daemon.
 
 If the old quota meter is installed, remove only that unrelated plugin before enabling this one:
 

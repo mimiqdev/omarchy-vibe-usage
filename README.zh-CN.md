@@ -1,29 +1,23 @@
 # Vibe Usage Omarchy 插件
 
-这是一个面向 Omarchy 4 的第三方 `bar-widget`，用于显示 [vibe-usage](https://github.com/vibe-cafe/vibe-usage) 的花费和令牌用量，并提供按本地时间查看今天、24 小时、7 天或 30 天数据的面板。
+这是一个面向 Omarchy 4 的第三方 `bar-widget`，用于显示 [Vibe Usage 仪表盘](https://vibecafe.ai/usage) 平台的花费和令牌用量，并提供按本地时间查看今天、24 小时、7 天或 30 天数据的面板。账户配置和数据同步由开源的 [vibe-usage 客户端](https://github.com/vibe-cafe/vibe-usage) 提供。
 
 [English documentation](README.md)
 
-本插件只负责显示：`vibe-usage` daemon 继续同步本地记录，插件在刷新时发起一次只读 API 请求。它不是 vibe-cafe 或 Omarchy 官方插件。
+本插件只负责显示：`vibe-usage` daemon 继续同步本地记录，插件在刷新时发起一次只读 API 请求。本项目是独立的社区集成，与 VibeCafé 或 Omarchy 没有隶属、赞助或背书关系。
 
-## 要求
+## 要求和依赖
 
 - 带 Quickshell 插件界面的 Omarchy 4
-- Python 3
-- 由 `vibe-usage init` 创建的 `~/.vibe-usage/config.json`
-- 建议运行 `vibe-usage` daemon
+- Python 3（只使用标准库，不需要 pip 包）
+- Vibe Usage 账户，以及由 `vibe-usage init` 创建的 `~/.vibe-usage/config.json`
+- 建议运行 `vibe-usage` daemon，以持续同步本地用量
 
 辅助程序自行读取 API Key，不会通过 QML、命令行参数或环境变量传递密钥。每次请求都会带上机器的本地 IANA 时区，使日历范围与桌面时间一致。
 
 ## 安装和更新
 
 插件 ID 是 `mimiqdev.vibe-usage`。从 GitHub 安装：
-
-```sh
-omarchy plugin add https://github.com/mimiqdev/omarchy-vibe-usage.git --enable
-```
-
-例如：
 
 ```sh
 omarchy plugin add https://github.com/mimiqdev/omarchy-vibe-usage.git --enable
@@ -36,6 +30,14 @@ omarchy plugin update mimiqdev.vibe-usage
 ```
 
 本地开发时可以用 `omarchy plugin validate` 校验当前目录。直接复制或用 `rsync` 安装的目录不是 git checkout，因此在从 git 安装之前，`omarchy plugin update mimiqdev.vibe-usage` 无法工作。
+
+卸载本插件：
+
+```sh
+omarchy plugin remove mimiqdev.vibe-usage --yes
+```
+
+卸载小部件不会删除 `~/.vibe-usage/config.json`，也不会停止单独管理的 `vibe-usage` daemon。
 
 如果安装了旧的配额条，只移除那个不相关的插件即可：
 
