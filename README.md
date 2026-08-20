@@ -53,6 +53,7 @@ Do not edit `/usr/share/omarchy/`.
 - Right click: open `https://vibecafe.ai/usage`
 - Middle click or `r`: refresh the current range
 - `h`/`l` or the range chips: switch Today / 24H / 7D / 30D and refetch
+- `Cost` / `Token`: switch the panel metric without refetching
 - `↗`: open the dashboard and close the panel
 - `Esc`: close; `Tab`: move to the neighboring bar panel
 
@@ -73,7 +74,7 @@ The helper performs one request per invocation:
 - `7d`: `days=7&tz=<IANA id>`
 - `30d`: `days=30&tz=<IANA id>`
 
-Successful JSON contains `totals` (cost, computed tokens, cache-only tokens, sessions, active time), chronological `series` bars, and top-eight `byHost`, `bySource`, and `byModel` lists. Token totals match the official website/Mac app:
+Successful JSON contains `totals` (cost, computed tokens, cache-only tokens, sessions, active time), chronological `series` bars, and independently ranked top-eight cost lists (`byHost`, `bySource`, `byModel`) plus token lists (`byHostTokens`, `bySourceTokens`, `byModelTokens`). Token totals match the official website/Mac app:
 
 ```text
 inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens
@@ -90,6 +91,7 @@ The panel follows the official Mac popover's order, not its pixels:
 ```text
 Vibe Usage                         [refresh] [dashboard]
 [Today] [24H] [7D] [30D]
+[Cost] [Token]
 ┌ cost ┐ ┌ tokens ┐ ┌ cache ┐ ┌ active ┐
 TREND   (hourly bars for Today/24H, daily bars for 7D/30D)
 BY TOOL
@@ -98,7 +100,7 @@ BY HOST
 updated …
 ```
 
-The four cards show cost, computed tokens, cache tokens, and active time. Breakdown rows show cost, percentage, and a bar. The helper is restarted cleanly for every refresh; a failed request never discards the previous successful report.
+The four cards always show cost, computed tokens, cache tokens, and active time. The `Cost` / `Token` switch changes the hero, trend bars, breakdown values, percentages, progress bars, sorting, and independent top-eight + `Other` lists without another request. Token values use compact `K`, `M`, and `B` units with at most one decimal. The bar pill and its `showTokens` setting are unchanged. The helper is restarted cleanly for every refresh; a failed request never discards the previous successful report.
 
 ## Publish and release
 

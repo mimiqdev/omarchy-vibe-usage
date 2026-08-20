@@ -53,6 +53,7 @@ omarchy plugin remove akitaonrails.ai-usagebar --yes
 - 右键：打开 `https://vibecafe.ai/usage`
 - 中键或按 `r`：刷新当前范围
 - 按 `h`/`l` 或点击范围按钮：切换今天 / 24 小时 / 7 天 / 30 天并重新获取
+- `费用` / `Token`：切换面板指标，不重新获取数据
 - `↗`：打开仪表盘并关闭面板
 - `Esc`：关闭；`Tab`：移动到相邻的条形面板
 
@@ -73,7 +74,7 @@ python3 helper/usage.py --range today|24h|7d|30d
 - `7d`：`days=7&tz=<IANA 时区>`
 - `30d`：`days=30&tz=<IANA 时区>`
 
-成功的 JSON 包含 `totals`（费用、计算后的 Token 数、仅缓存 Token 数、会话数、活跃时间）、按时间排序的 `series`，以及最多八项的 `byHost`、`bySource` 和 `byModel` 列表。Token 总数与官网/Mac App 保持一致，计算公式是：
+成功的 JSON 包含 `totals`（费用、计算后的 Token 数、仅缓存 Token 数、会话数、活跃时间）、按时间排序的 `series`，以及独立排序的费用列表（`byHost`、`bySource`、`byModel`）和 Token 列表（`byHostTokens`、`bySourceTokens`、`byModelTokens`）。Token 总数与官网/Mac App 保持一致，计算公式是：
 
 ```text
 inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens
@@ -90,6 +91,7 @@ inputTokens + outputTokens + reasoningOutputTokens + cachedInputTokens
 ```text
 Vibe Usage                         [刷新] [仪表盘]
 [今天] [24小时] [7天] [30天]
+[费用] [Token]
 ┌ 费用 ┐ ┌ Token ┐ ┌ 缓存 ┐ ┌ 活跃 ┐
 趋势    （今天/24小时按小时，7天/30天按天）
 按工具
@@ -98,7 +100,7 @@ Vibe Usage                         [刷新] [仪表盘]
 更新时间 …
 ```
 
-四张卡片显示费用、计算后的 Token 数、缓存 Token 数和活跃时间。分组行显示费用、百分比和条形图。每次刷新都会干净地重启辅助进程；请求失败不会丢弃上一次成功的报告。
+四张卡片始终显示费用、计算后的 Token 数、缓存 Token 数和活跃时间。`费用` / `Token` 切换会立即改变主指标、趋势条、分组行数值、百分比、进度条、排序以及独立的前八项 + `Other` 列表，不会重新请求数据。Token 数使用紧凑的 `K`、`M`、`B` 单位，最多保留一位小数。条形区和 `showTokens` 设置保持不变。每次刷新都会干净地重启辅助进程；请求失败不会丢弃上一次成功的报告。
 
 ## 发布和版本流程
 

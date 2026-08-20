@@ -27,6 +27,8 @@ Panel {
 
   property var report: null
   property string range: Model.normalizeRange(setting("period", "today"))
+  // This is presentation-only state. Changing it never restarts the helper.
+  property string metric: "cost"
   property bool loading: true
   property bool refreshQueued: false
   property bool restartRequested: false
@@ -49,7 +51,16 @@ Panel {
   readonly property var totals: currentReport ? currentReport.totals
     : ({ cost: 0, tokens: 0, cachedTokens: 0, sessions: 0, activeSeconds: 0 })
   readonly property var series: currentReport ? currentReport.series : []
-  readonly property real maxSeriesCost: Model.maxSeriesCost(series)
+  readonly property var activeByHost: currentReport
+    ? (metric === "tokens" ? currentReport.byHostTokens : currentReport.byHost)
+    : []
+  readonly property var activeBySource: currentReport
+    ? (metric === "tokens" ? currentReport.bySourceTokens : currentReport.bySource)
+    : []
+  readonly property var activeByModel: currentReport
+    ? (metric === "tokens" ? currentReport.byModelTokens : currentReport.byModel)
+    : []
+  readonly property real maxSeriesValue: Model.maxSeriesValue(series, metric)
   readonly property bool emptyReport: !!currentReport
     && totals.cost === 0 && totals.tokens === 0 && totals.cachedTokens === 0
     && totals.sessions === 0 && totals.activeSeconds === 0
@@ -304,7 +315,13 @@ Panel {
           PanelHero {
             width: parent.width
             title: Locale.t("brand", null, root.uiLocale)
-            detail: root.currentReport ? Model.formatCost(root.totals.cost, false) : ""
+            detail: root.currentReport
+              ? Model.formatMetric(
+                root.metric === "tokens" ? root.totals.tokens : root.totals.cost,
+                root.metric,
+                false
+              )
+              : ""
             meta: root.periodMeta()
             foreground: root.foreground
             fontFamily: root.fontFamily
@@ -358,6 +375,26 @@ Panel {
                 fontFamily: root.fontFamily
                 fontSize: Style.font.bodySmall
                 onClicked: root.setRange(modelData)
+              }
+            }
+          }
+
+          Row {
+            width: parent.width
+            spacing: Style.space(4)
+
+            Repeater {
+              model: ["cost", "tokens"]
+
+              Button {
+                required property string modelData
+                text: Locale.t("metric." + modelData, null, root.uiLocale)
+                selected: root.metric === modelData
+                bordered: true
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                onClicked: root.metric = modelData
               }
             }
           }
@@ -462,8 +499,9 @@ Panel {
                       anchors.horizontalCenter: parent.horizontalCenter
                       anchors.bottom: parent.bottom
                       width: Math.max(Style.space(3), parent.width - 2)
-                      height: root.maxSeriesCost > 0
-                        ? Math.max(2, (Number(modelData.cost) / root.maxSeriesCost)
+                      height: root.maxSeriesValue > 0
+                        ? Math.max(2, (Number(Model.metricValue(modelData, root.metric))
+                          / root.maxSeriesValue)
                           * (parent.height - Style.space(12)))
                         : 2
                       radius: Math.min(2, height / 2)
@@ -503,7 +541,7 @@ Panel {
 
           Column {
             id: sourceSection
-            visible: root.showReportBody && root.currentReport.bySource.length > 0
+            visible: root.showReportBody && root.activeBySource.length > 0
             width: parent.width
             spacing: Style.space(8)
 
@@ -515,7 +553,7 @@ Panel {
             }
 
             Repeater {
-              model: root.currentReport ? root.currentReport.bySource : []
+              model: root.activeBySource
               delegate: Item {
                 required property var modelData
                 width: sourceSection.width
@@ -532,7 +570,7 @@ Panel {
 
           Column {
             id: modelSection
-            visible: root.showReportBody && root.currentReport.byModel.length > 0
+            visible: root.showReportBody && root.activeByModel.length > 0
             width: parent.width
             spacing: Style.space(8)
 
@@ -544,7 +582,7 @@ Panel {
             }
 
             Repeater {
-              model: root.currentReport ? root.currentReport.byModel : []
+              model: root.activeByModel
               delegate: Item {
                 required property var modelData
                 width: modelSection.width
@@ -561,7 +599,7 @@ Panel {
 
           Column {
             id: hostSection
-            visible: root.showReportBody && root.currentReport.byHost.length > 0
+            visible: root.showReportBody && root.activeByHost.length > 0
             width: parent.width
             spacing: Style.space(8)
 
@@ -573,7 +611,7 @@ Panel {
             }
 
             Repeater {
-              model: root.currentReport ? root.currentReport.byHost : []
+              model: root.activeByHost
               delegate: Item {
                 required property var modelData
                 width: hostSection.width
@@ -676,12 +714,18 @@ Panel {
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
         elide: Text.ElideRight
-        width: Math.max(0, parent.width - costText.implicitWidth - pctText.implicitWidth - Style.space(24))
+        width: Math.max(0, parent.width - metricText.implicitWidth - pctText.implicitWidth - Style.space(24))
       }
 
       Text {
-        id: costText
-        text: spendRow.row ? Model.formatCost(spendRow.row.cost, false) : ""
+        id: metricText
+        text: spendRow.row
+          ? Model.formatMetric(
+            Model.metricValue(spendRow.row, root.metric),
+            root.metric,
+            false
+          )
+          : ""
         textFormat: Text.PlainText
         color: root.foreground
         font.family: root.fontFamily

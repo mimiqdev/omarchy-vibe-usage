@@ -26,8 +26,9 @@ Follow the official Mac popover **order**, not its pixels. One API request per s
 ```text
 Hero: Vibe Usage          [↻] [↗]
 [Today] [24H] [7D] [30D]
+[Cost] [Token]
 ┌ cost ┐ ┌ tokens ┐ ┌ cache ┐ ┌ active ┐
-TREND   (simple cost bars: hours for Today/24H, days for 7D/30D)
+TREND   (selected-metric bars: hours for Today/24H, days for 7D/30D)
 BY TOOL
 BY MODEL
 BY HOST
@@ -39,14 +40,15 @@ updated …
 - Send `tz=<local IANA id>` on every request (this is how the Mac app gets local calendar days).
 - Ranges: `today` (`from=` local midnight), `24h` (`days=1`), `7d`, `30d`. Changing range refetches once.
 - Four cards: cost, tokens, **cache tokens**, active time.
-- Simple unstacked cost bars. Highlight the last bar (now / today).
+- A `Cost` / `Token` segmented control below the range selector. Cost is the default and changing it is presentation-only; it never refetches.
+- The selected metric controls the hero, simple unstacked trend bars, breakdown values, percentages, progress bars, sorting, and top-eight + `Other` aggregation. Highlight the last bar (now / today).
 - `BY TOOL`, `BY MODEL`, then `BY HOST` rows (same shape).
 - Unconfigured / 401 empty state: tell the user to run `vibe-usage init`.
 - Restart the helper process cleanly on every refresh so middle-click cannot stick.
 
 ### Out of Phase 2 (Phase 3)
 
-Donut charts, host/tool/model dropdown filters, stacked input/output/cache bars, Token/费用/活跃 chart toggle, 90D, custom date range, project filter, in-panel login, CLI `summary --json`, quota cards (`omarchy.agents`).
+Donut charts, host/tool/model dropdown filters, stacked input/output/cache bars, a separate input/output/cache chart toggle, 90D, custom date range, project filter, in-panel login, CLI `summary --json`, quota cards (`omarchy.agents`).
 
 ## Layout
 
@@ -118,7 +120,10 @@ Success:
   ],
   "byHost": [{ "name": "Tonys-MacBook-Air", "cost": 180.1, "tokens": 20000000, "sessions": 20, "pct": 87 }],
   "bySource": [{ "name": "codex", "cost": 203.22, "tokens": 18000000, "sessions": 21, "pct": 98 }],
-  "byModel": [{ "name": "gpt-5.6-sol", "cost": 126.97, "tokens": 4300000, "pct": 62 }]
+  "byModel": [{ "name": "gpt-5.6-sol", "cost": 126.97, "tokens": 4300000, "pct": 62 }],
+  "byHostTokens": [{ "name": "Tonys-MacBook-Air", "cost": 180.1, "tokens": 20000000, "sessions": 20, "pct": 87 }],
+  "bySourceTokens": [{ "name": "codex", "cost": 203.22, "tokens": 18000000, "sessions": 21, "pct": 98 }],
+  "byModelTokens": [{ "name": "gpt-5.6-sol", "cost": 126.97, "tokens": 4300000, "pct": 62 }]
 }
 ```
 
@@ -148,9 +153,9 @@ Rules:
 | `cachedTokens` | Sum of `cachedInputTokens` only |
 | `cost` | Sum of `estimatedCost` |
 | `sessions` | Session count in the fetched payload |
-| `pct` | Share of that window's `cost`, rounded to int |
-| Sort | Cost descending |
-| Truncate | Top 8 per list; remainder becomes `Other` |
+| `pct` | Share of the selected metric in that window, rounded to int |
+| Sort | Cost lists descend by cost; `*Tokens` lists descend by computed tokens |
+| Truncate | Top 8 per list independently; each remainder becomes `Other` |
 | Timeout | 15s |
 | 401 | Fixed copy pointing at `vibe-usage init` |
 | Missing key | Fixed copy pointing at init |
@@ -178,17 +183,18 @@ session: source, project, hostname, firstMessageAt, lastMessageAt,
 - Error, no cache: `!`
 - Error with cache: keep last good value; panel marks stale
 
-Formats: cost `$` + 2 decimals (integer on vertical); tokens `43.8M` / `874K` / raw.
+Formats: cost `$` + 2 decimals (integer on vertical); tokens use compact decimal units such as `999`, `1K`, `1.3K`, `1M`, `30.9M`, and `1.2B`.
 
 ## Panel
 
 Same Omarchy kit (`KeyboardPanel` + `PanelHero`). Arrangement follows the Mac popover, simplified.
 
-- Hero: title `Vibe Usage`, detail = cost, meta = range + sessions + active
+- Hero: title `Vibe Usage`, detail = the selected metric, meta = range + sessions + active
 - Range buttons: `Today` / `24H` / `7D` / `30D` (refetch)
+- Metric buttons: `Cost` / `Token` (`费用` / `Token` in Chinese), defaulting to Cost without refetching
 - Four cards: cost, tokens, cache, active
-- `TREND`: one bar per series point, height by cost, last bar emphasized
-- `BY TOOL`, `BY MODEL`, `BY HOST` rows (cost + bar + pct)
+- `TREND`: one bar per series point, height by the selected metric, last bar emphasized
+- `BY TOOL`, `BY MODEL`, `BY HOST` rows (selected metric + bar + selected-metric pct)
 - Footer: `updated …` / `refreshing…`
 - Missing key / 401: keep the hero, replace the body with init instructions
 

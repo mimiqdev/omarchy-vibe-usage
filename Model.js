@@ -65,6 +65,18 @@ function isRange(value) {
   return RANGES.includes(range);
 }
 
+function normalizeMetric(value) {
+  return String(value === undefined || value === null ? "" : value).toLowerCase() ===
+    "tokens"
+    ? "tokens"
+    : "cost";
+}
+
+function metricValue(row, metric) {
+  var item = row && typeof row === "object" ? row : {};
+  return normalizeMetric(metric) === "tokens" ? item.tokens : item.cost;
+}
+
 function normalizeTotals(raw) {
   raw = raw && typeof raw === "object" ? raw : {};
   return {
@@ -160,6 +172,9 @@ function parseReport(stdout) {
       byHost: normalizeRows(parsed.byHost, true),
       bySource: normalizeRows(parsed.bySource, true),
       byModel: normalizeRows(parsed.byModel, false),
+      byHostTokens: normalizeRows(parsed.byHostTokens, true),
+      bySourceTokens: normalizeRows(parsed.bySourceTokens, true),
+      byModelTokens: normalizeRows(parsed.byModelTokens, false),
     };
   } catch (error) {
     return parseFailure("The helper returned invalid JSON.", "invalid_json");
@@ -183,11 +198,24 @@ function formatCost(value, vertical) {
   return "$" + amount.toFixed(2);
 }
 
+function compactTokens(tokens, divisor, suffix) {
+  var value = (tokens / divisor).toFixed(1).replace(/\.0$/, "");
+  return value + suffix;
+}
+
 function formatTokens(value) {
   var tokens = integer(value);
-  if (tokens >= 1000000) return (tokens / 1000000).toFixed(1) + "M";
-  if (tokens >= 1000) return Math.round(tokens / 1000) + "K";
+  if (tokens >= 1000000000)
+    return compactTokens(tokens, 1000000000, "B");
+  if (tokens >= 1000000) return compactTokens(tokens, 1000000, "M");
+  if (tokens >= 1000) return compactTokens(tokens, 1000, "K");
   return String(tokens);
+}
+
+function formatMetric(value, metric, vertical) {
+  return normalizeMetric(metric) === "tokens"
+    ? formatTokens(value)
+    : formatCost(value, vertical === true);
 }
 
 function formatActive(value) {
@@ -329,12 +357,16 @@ function updatedText(fetchedAt, nowMs, locale, localeModule) {
   );
 }
 
-function maxSeriesCost(series) {
+function maxSeriesValue(series, metric) {
   var points = Array.isArray(series) ? series : [];
   var maximum = 0;
   for (var i = 0; i < points.length; i++)
-    maximum = Math.max(maximum, nonNegative(points[i] && points[i].cost));
+    maximum = Math.max(maximum, nonNegative(metricValue(points[i], metric)));
   return maximum;
+}
+
+function maxSeriesCost(series) {
+  return maxSeriesValue(series, "cost");
 }
 
 function safeDashboard(value) {
@@ -362,12 +394,16 @@ if (typeof module !== "undefined") {
     windowFor: windowFor,
     formatCost: formatCost,
     formatTokens: formatTokens,
+    formatMetric: formatMetric,
     formatActive: formatActive,
+    normalizeMetric: normalizeMetric,
+    metricValue: metricValue,
     periodLabel: periodLabel,
     periodMetaLabel: periodMetaLabel,
     barText: barText,
     tooltipText: tooltipText,
     updatedText: updatedText,
+    maxSeriesValue: maxSeriesValue,
     maxSeriesCost: maxSeriesCost,
     safeDashboard: safeDashboard,
     requiresInit: requiresInit,

@@ -44,6 +44,27 @@ const report = Model.parseReport(
       },
     ],
     byModel: [{ name: "grok-4.6", cost: 44.61, tokens: 7700000, pct: 38 }],
+    byHostTokens: [
+      {
+        name: "Work<Omarchy>",
+        cost: 80.12,
+        tokens: 3000000000,
+        sessions: 20,
+        pct: 91,
+      },
+    ],
+    bySourceTokens: [
+      {
+        name: "pi-coding-agent",
+        cost: 80.12,
+        tokens: 3000000000,
+        sessions: 20,
+        pct: 91,
+      },
+    ],
+    byModelTokens: [
+      { name: "grok-4.6", cost: 44.61, tokens: 3000000000, pct: 91 },
+    ],
   }),
 );
 
@@ -52,11 +73,25 @@ assert.equal(report.hostname, "Work‹Omarchy›");
 assert.equal(report.totals.cachedTokens, 18000000);
 assert.equal(report.series[0].label, "09:00");
 assert.equal(report.byHost[0].name, "Work<Omarchy>");
+assert.equal(report.byHostTokens[0].tokens, 3000000000);
+assert.equal(report.bySourceTokens[0].pct, 91);
+assert.equal(report.byModelTokens[0].name, "grok-4.6");
 assert.equal(Model.formatCost(117.95), "$117.95");
 assert.equal(Model.formatCost(117.95, true), "$118");
+assert.equal(Model.formatTokens(999), "999");
+assert.equal(Model.formatTokens(1000), "1K");
+assert.equal(Model.formatTokens(1250), "1.3K");
+assert.equal(Model.formatTokens(1000000), "1M");
+assert.equal(Model.formatTokens(30900000), "30.9M");
+assert.equal(Model.formatTokens(1200000000), "1.2B");
 assert.equal(Model.formatTokens(43800000), "43.8M");
 assert.equal(Model.formatTokens(874000), "874K");
 assert.equal(Model.formatTokens(874), "874");
+assert.equal(Model.formatMetric(1250, "tokens"), "1.3K");
+assert.equal(Model.formatMetric(117.95, "cost"), "$117.95");
+assert.equal(Model.normalizeMetric("tokens"), "tokens");
+assert.equal(Model.normalizeMetric("unknown"), "cost");
+assert.equal(Model.metricValue({ cost: 4, tokens: 900 }, "tokens"), 900);
 assert.equal(Model.formatActive(76320), "21.2h");
 assert.equal(Model.formatActive(90), "2m");
 assert.equal(Model.formatActive(4), "4s");
@@ -98,6 +133,7 @@ assert.equal(
   "3 分钟前更新",
 );
 assert.equal(Model.maxSeriesCost(report.series), 12);
+assert.equal(Model.maxSeriesValue(report.series, "tokens"), 1000000);
 
 const unsafe = Model.autoTextSafe("<img src='x'>\u0001\nnext");
 assert.equal(unsafe, "‹img src='x'› next");

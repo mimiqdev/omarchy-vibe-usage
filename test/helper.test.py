@@ -88,6 +88,11 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(report["bySource"][0]["name"], "cursor")
         self.assertEqual(report["bySource"][0]["tokens"], 2250)
         self.assertEqual(report["bySource"][1]["name"], "pi")
+        self.assertEqual(report["bySourceTokens"][0]["name"], "cursor")
+        self.assertEqual(report["bySourceTokens"][1]["name"], "pi")
+        self.assertEqual(report["bySourceTokens"][0]["pct"], 63)
+        self.assertEqual(report["byHostTokens"][0]["name"], "Home")
+        self.assertEqual(report["byModelTokens"][0]["name"], "grok")
         self.assertEqual(report["bySource"][0]["sessions"], 1)
         self.assertEqual(report["byHost"][0]["name"], "Home")
         self.assertEqual(report["byModel"][0]["name"], "grok")
@@ -136,6 +141,56 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(report["totals"]["tokens"], 800)
         self.assertEqual(report["series"][0]["tokens"], 800)
         self.assertEqual(report["byModel"][0]["tokens"], 800)
+
+    def test_cost_and_token_rankings_are_independent(self):
+        buckets = [
+            {"source": "expensive", "model": "expensive", "hostname": "expensive",
+             "bucketStart": "2026-08-20T01:00:00+08:00", "inputTokens": 100,
+             "outputTokens": 0, "reasoningOutputTokens": 0, "cachedInputTokens": 0,
+             "estimatedCost": 9},
+            {"source": "high-volume", "model": "high-volume", "hostname": "high-volume",
+             "bucketStart": "2026-08-20T02:00:00+08:00", "inputTokens": 10000,
+             "outputTokens": 0, "reasoningOutputTokens": 0, "cachedInputTokens": 0,
+             "estimatedCost": 1},
+        ]
+        window = usage.build_window(
+            buckets, [], range_name="today", timezone_name=self.timezone_name
+        )
+
+        self.assertEqual([row["name"] for row in window["bySource"]], [
+            "expensive", "high-volume"
+        ])
+        self.assertEqual([row["name"] for row in window["bySourceTokens"]], [
+            "high-volume", "expensive"
+        ])
+        self.assertEqual(window["bySource"][0]["pct"], 90)
+        self.assertEqual(window["bySourceTokens"][0]["pct"], 99)
+        self.assertEqual(window["byModelTokens"][0]["name"], "high-volume")
+        self.assertEqual(window["byHostTokens"][0]["name"], "high-volume")
+
+    def test_token_top_eight_and_other_are_independent(self):
+        buckets = [
+            {"source": f"tool-{i}", "model": f"model-{i}", "hostname": f"host-{i}",
+             "bucketStart": "2026-08-20T01:00:00+08:00", "inputTokens": 10000 - i * 100,
+             "outputTokens": 0, "reasoningOutputTokens": 0, "cachedInputTokens": 0,
+             "estimatedCost": i + 1}
+            for i in range(10)
+        ]
+        window = usage.build_window(
+            buckets, [], range_name="today", timezone_name=self.timezone_name
+        )
+
+        self.assertEqual([row["name"] for row in window["byModel"]], [
+            "model-9", "model-8", "model-7", "model-6", "model-5",
+            "model-4", "model-3", "model-2", "Other",
+        ])
+        self.assertEqual([row["name"] for row in window["byModelTokens"]], [
+            "model-0", "model-1", "model-2", "model-3", "model-4",
+            "model-5", "model-6", "model-7", "Other",
+        ])
+        self.assertEqual(window["byModel"][8]["tokens"], 19900)
+        self.assertEqual(window["byModelTokens"][8]["cost"], 19)
+        self.assertEqual(window["byModelTokens"][8]["tokens"], 18300)
 
     def test_top_eight_and_other(self):
         buckets = [

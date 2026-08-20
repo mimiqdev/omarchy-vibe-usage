@@ -13,6 +13,10 @@ assert.equal(Locale.normalizeLocale("ja_JP"), "en");
 assert.equal(Locale.t("period.today", null, "en"), "Today");
 assert.equal(Locale.t("period.today", null, "zh-CN"), "今天");
 assert.equal(Locale.t("section.tool", null, "zh-CN"), "按工具");
+assert.equal(Locale.t("metric.cost", null, "en"), "Cost");
+assert.equal(Locale.t("metric.tokens", null, "en"), "Token");
+assert.equal(Locale.t("metric.cost", null, "zh-CN"), "费用");
+assert.equal(Locale.t("metric.tokens", null, "zh-CN"), "Token");
 assert.equal(Locale.t("card.cost", "zh-CN"), "费用");
 assert.equal(
   Locale.t(

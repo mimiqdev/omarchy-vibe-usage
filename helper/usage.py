@@ -433,10 +433,21 @@ def _ranked(
     groups: OrderedDict[str, dict[str, int | float]],
     total_cost: float,
     include_sessions: bool,
+    *,
+    metric: str = "cost",
+    total_tokens: int | float = 0,
 ) -> list[dict[str, int | float | str]]:
+    """Return a top-eight list ranked and metered by one report metric.
+
+    The helper keeps both values on every row, but the selected metric controls
+    ordering, the ``Other`` cutoff, and the percentage denominator. Cost is
+    the default to preserve the original response contract for existing
+    callers.
+    """
+    selected_metric = "tokens" if metric == "tokens" else "cost"
     ranked = sorted(
         groups.items(),
-        key=lambda item: (-_number(item[1].get("cost", 0)), item[0]),
+        key=lambda item: (-_number(item[1].get(selected_metric, 0)), item[0]),
     )
     if len(ranked) > 8:
         kept = ranked[:8]
@@ -456,18 +467,24 @@ def _ranked(
         kept = ranked
 
     rows: list[dict[str, int | float | str]] = []
-    denominator = _cost(total_cost)
+    denominator = (
+        _tokens(total_tokens) if selected_metric == "tokens" else _cost(total_cost)
+    )
     for name, group in kept:
         cost = _tidy(group.get("cost", 0))
+        tokens = _tokens(group.get("tokens", 0))
+        measured = tokens if selected_metric == "tokens" else cost
         row: dict[str, int | float | str] = {
             "name": name,
             "cost": cost,
-            "tokens": _tokens(group.get("tokens", 0)),
+            "tokens": tokens,
         }
         if include_sessions:
             row["sessions"] = _safe_int(group.get("sessions", 0))
         row["pct"] = (
-            _round_percent(_number(cost) * 100 / denominator) if denominator > 0 else 0
+            _round_percent(_number(measured) * 100 / _number(denominator))
+            if _number(denominator) > 0
+            else 0
         )
         rows.append(row)
     return rows
@@ -609,9 +626,21 @@ def build_window(
             "activeSeconds": _tidy(active_seconds),
         },
         "series": _series(bucket_values, selected, zone),
+        # Keep the original cost-ranked lists stable for compatibility. Token
+        # lists are independently ranked so high-volume, low-cost groups are
+        # not hidden by the cost-based top-eight cutoff.
         "byHost": _ranked(by_host, total_cost, True),
         "bySource": _ranked(by_source, total_cost, True),
         "byModel": _ranked(by_model, total_cost, False),
+        "byHostTokens": _ranked(
+            by_host, total_cost, True, metric="tokens", total_tokens=total_tokens
+        ),
+        "bySourceTokens": _ranked(
+            by_source, total_cost, True, metric="tokens", total_tokens=total_tokens
+        ),
+        "byModelTokens": _ranked(
+            by_model, total_cost, False, metric="tokens", total_tokens=total_tokens
+        ),
     }
 
 
